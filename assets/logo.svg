@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="figoneBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D96843"/>
+      <stop offset="50%" stop-color="#C85834"/>
+      <stop offset="100%" stop-color="#A83E20"/>
+    </linearGradient>
+    <linearGradient id="curveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#FFE8DF" stop-opacity="0.88"/>
+    </linearGradient>
+    <linearGradient id="curveGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCE1D6" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#EAA18A" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCE8A6"/>
+      <stop offset="100%" stop-color="#E8B854"/>
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#541B0B" flood-opacity="0.28"/>
+    </filter>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Base Rounded Container with Warm Shadow -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#figoneBg)" filter="url(#subtleShadow)"/>
+  
+  <!-- Subtle Inner Top Highlight -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="2.5"/>
+
+  <!-- Decorative Subtle Geometry Grid Lines (Scientific Aesthetics) -->
+  <g opacity="0.12" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="4,6">
+    <line x1="120" y1="90" x2="120" y2="422"/>
+    <line x1="256" y1="90" x2="256" y2="422"/>
+    <line x1="392" y1="90" x2="392" y2="422"/>
+    <line x1="90" y1="140" x2="422" y2="140"/>
+    <line x1="90" y1="256" x2="422" y2="256"/>
+    <line x1="90" y1="372" x2="422" y2="372"/>
+  </g>
+
+  <!-- Stylized Vector Curves: "F" + Figure Diagram Synthesis -->
+  <g filter="url(#glow)">
+    <!-- Primary Vertical Stem with Bezier Flare -->
+    <path d="M 148 126 C 148 116, 156 108, 166 108 L 206 108 C 216 108, 224 116, 224 126 L 224 386 C 224 396, 216 404, 206 404 L 166 404 C 156 404, 148 396, 148 386 Z" 
+          fill="url(#curveGrad1)"/>
+
+    <!-- Top Fluid Vector Ribbon (Arching Right & Node Connection) -->
+    <path d="M 214 108 L 350 108 C 374 108, 394 128, 394 152 C 394 176, 374 196, 350 196 L 224 196 L 224 108 Z" 
+          fill="url(#curveGrad1)"/>
+
+    <!-- Middle Dynamic Curve Ribbon (Scientific Figure Wave) -->
+    <path d="M 214 232 L 316 232 C 342 232, 362 250, 362 272 C 362 294, 342 312, 316 312 L 224 312 L 224 232 Z" 
+          fill="url(#curveGrad2)"/>
+
+    <!-- Vector Flow Path Overlay (S-Curve of Scientific Reasoning) -->
+    <path d="M 186 380 C 186 300, 330 330, 330 220 C 330 160, 290 140, 256 140" 
+          fill="none" stroke="url(#goldGrad)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Vector Anchor Nodes (Visualizing Precision & Segmentation) -->
+  <!-- Main Nodes -->
+  <circle cx="350" cy="152" r="16" fill="#FFFFFF" stroke="#C85834" stroke-width="4.5"/>
+  <circle cx="316" cy="272" r="13" fill="#FFFFFF" stroke="#C85834" stroke-width="4"/>
+  <circle cx="186" cy="152" r="8" fill="#FFFFFF"/>
+  <circle cx="186" cy="272" r="8" fill="#FFFFFF"/>
+  <circle cx="186" cy="372" r="9" fill="url(#goldGrad)"/>
+
+  <!-- Golden Anchor Accents (Data & AI Spark) -->
+  <circle cx="376" cy="348" r="7" fill="url(#goldGrad)"/>
+  <circle cx="398" cy="242" r="5" fill="url(#goldGrad)" opacity="0.85"/>
+  <circle cx="300" cy="386" r="6" fill="#FFFFFF" opacity="0.75"/>
+</svg>
