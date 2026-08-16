@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · Method Workflow</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="input">
+    <div class="page page-workflow">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="brandTitle">FigOne</span>
+          </a>
+          <div class="subtitle" id="inputPageSubtitle">Generate SVG templates and preview every step.</div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost topbar-link" id="inputGuideBtn" href="/guide.html">I don't know how to fill this</a>
+          <a class="ghost topbar-link" id="inputModelsBtn" href="/models.html">Models & Providers</a>
+          <a class="ghost topbar-link history-action" id="inputHistoryBtn" href="/history.html">History</a>
+          <a class="dark-action" id="importEntryBtn" href="/import.html">I already have the stage-1 figure</a>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="workflow-layout">
+        <section class="card workflow-hero-card">
+          <div class="workflow-hero-kicker">QUICK START</div>
+          <h1 class="workflow-hero-title" id="methodWorkflowTitle">Method Text Workflow</h1>
+          <p class="workflow-hero-copy" id="methodWorkflowCopy">
+            Paste method text, pick a saved provider profile, then launch the full figure-to-SVG pipeline.
+          </p>
+
+          <div class="field-group">
+            <label class="field-label" id="methodTextLabel" for="methodText">Method Text</label>
+            <textarea
+              id="methodText"
+              class="textarea textarea-hero"
+              placeholder="Paste your paper method text here..."
+            ></textarea>
+            <div class="hint" id="methodHint">Tip: concise, structured method text yields cleaner templates.</div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <label class="field-label" id="profilePickerLabel" for="providerProfileSelect">Provider Profile</label>
+              <div class="field-caption" id="profilePickerCaption">Saved in Models & Providers. Switch here without re-entering keys.</div>
+            </div>
+            <div id="providerProfileEmptyState" class="profile-picker-empty">
+              <div class="provider-empty-icon" aria-hidden="true">+</div>
+              <strong id="profilePickerEmptyTitle">No provider saved yet</strong>
+              <span id="profilePickerEmptyCopy">Add a provider once in Models & Providers, then come back to run the workflow.</span>
+              <a class="ghost" id="profilePickerEmptyLink" href="/models.html">Add provider</a>
+            </div>
+            <div id="providerProfilePicker" class="profile-picker" hidden>
+              <select id="providerProfileSelect" class="input"></select>
+              <article class="profile-picker-card">
+                <div class="profile-picker-card-top">
+                  <div>
+                    <div class="profile-picker-name" id="providerProfileName"></div>
+                    <div class="profile-picker-meta" id="providerProfileMeta"></div>
+                  </div>
+                  <a class="ghost" id="providerProfileManageLink" href="/models.html">Manage</a>
+                </div>
+              </article>
+            </div>
+            <div class="hint" id="bianxieRegisterHint" hidden>
+              Register at <a href="https://bianxieai.com/autofigure" target="_blank" rel="noopener noreferrer">bianxieai</a>.
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <label class="field-label" id="pipelineRoutingLabel">Pipeline Routing</label>
+              <div class="field-caption" id="pipelineRoutingCaption">Routes follow the selected provider profile.</div>
+            </div>
+            <div class="route-summary">
+              <div class="route-row">
+                <span class="route-label" id="routeStep1Label">Step 1 Raster</span>
+                <strong id="imageRouteSummary" class="route-value"></strong>
+              </div>
+              <div class="route-row">
+                <span class="route-label" id="routeStep4Label">Step 4 SVG</span>
+                <strong id="svgRouteSummary" class="route-value"></strong>
+              </div>
+              <div id="routeSummaryNote" class="route-note"></div>
+            </div>
+          </div>
+
+          <div class="workflow-launch">
+            <button id="confirmBtn" class="primary workflow-primary-btn">Confirm -> Canvas</button>
+            <div id="errorMsg" class="error"></div>
+          </div>
+        </section>
+
+        <details class="card workflow-advanced-card" open>
+          <summary class="workflow-advanced-summary">
+            <span id="advancedOptionsTitle">Advanced options</span>
+            <span class="workflow-advanced-badge" id="advancedOptionsBadge">Optional</span>
+          </summary>
+          <div class="workflow-advanced-body">
+            <div class="field-grid-2">
+              <div class="field-group">
+                <label class="field-label" id="optimizeLabel" for="optimizeIterations">Optimize</label>
+                <input id="optimizeIterations" class="input" type="number" min="0" value="0" />
+              </div>
+              <div class="field-group">
+                <div class="field-header">
+                  <label class="field-label" id="multimodalScaleLabel" for="multimodalImageScale">Multimodal preview quality</label>
+                  <div class="field-caption" id="multimodalScaleCaption">
+                    Only compresses images sent to the SVG model. Source files, SAM3, SVG canvas size, and final icons stay full resolution.
+                  </div>
+                </div>
+                <select id="multimodalImageScale" class="input">
+                  <option value="1">Original (100%)</option>
+                  <option value="0.75">High (75%)</option>
+                  <option value="0.5" selected>Balanced (50%, recommended)</option>
+                  <option value="0.4">Compressed (40%)</option>
+                  <option value="0.25">Small (25%)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field-group" id="imageSizeGroup" hidden>
+              <label class="field-label" id="imageSizeLabel" for="imageSize">Image Size</label>
+              <select id="imageSize" class="input">
+                <option value="1K">1K</option>
+                <option value="2K">2K</option>
+                <option value="4K" selected>4K</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" id="upscaleLabel" for="upscaleEnabled">Auto Upscale</label>
+              <label id="upscaleText" class="checkbox-row">
+                <input id="upscaleEnabled" type="checkbox" checked />
+                Upscale figure.png to a 4K long edge while preserving aspect ratio
+              </label>
+            </div>
+
+            <div class="field-grid-2">
+              <div class="field-group">
+                <label class="field-label" id="samBackendLabel" for="samBackend">SAM3 Backend</label>
+                <select id="samBackend" class="input">
+                  <option value="local" selected>Local (SAM3)</option>
+                  <option value="fal">fal.ai API</option>
+                  <option value="roboflow">Roboflow API</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" id="samPromptLabel" for="samPrompt">SAM Prompt</label>
+                <input
+                  id="samPrompt"
+                  type="text"
+                  class="input"
+                  value="icon,person,robot,animal"
+                  placeholder="icon,person,robot,animal"
+                />
+              </div>
+            </div>
+
+            <div class="field-group" id="samApiKeyGroup" hidden>
+              <label class="field-label" id="samApiKeyLabel" for="samApiKey">SAM3 API Key</label>
+              <input
+                id="samApiKey"
+                type="password"
+                class="input"
+                placeholder="FAL/Roboflow API key"
+              />
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" id="referenceImageLabel" for="referenceFile">Reference Image</label>
+              <div class="upload-zone" id="uploadZone">
+                <input id="referenceFile" class="file-input" type="file" accept="image/*" />
+                <div class="upload-text" id="referenceUploadText">Drop image here or click to upload</div>
+              </div>
+              <div class="upload-meta">
+                <img id="referencePreview" class="upload-preview" alt="Reference preview" />
+                <div id="referenceStatus" class="hint"></div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div hidden>
+          <input id="provider" type="hidden" value="bianxie" />
+          <input id="imageProvider" type="hidden" value="same" />
+          <input id="svgModel" type="hidden" value="gemini-3.1-pro-preview" />
+          <input id="imageModel" type="hidden" value="gpt-image-2" />
+          <input id="apiKey" type="hidden" value="" />
+          <input id="baseUrl" type="hidden" value="" />
+          <input id="imageApiKey" type="hidden" value="" />
+          <input id="imageBaseUrl" type="hidden" value="" />
+        </div>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

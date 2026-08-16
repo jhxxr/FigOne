@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · History</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="history">
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="historyBrandTitle">History</span>
+          </a>
+          <div class="subtitle" id="historySubtitle">Saved FigOne vector and raster outputs.</div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost topbar-link" id="historyBackInputBtn" href="/">Back to Method Workflow</a>
+          <a class="ghost topbar-link" id="historyBackImportBtn" href="/import.html">Back to Import Workflow</a>
+          <button class="ghost" id="historyRefreshBtn" type="button">Refresh</button>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="history-layout">
+        <section class="history-summary">
+          <div class="panel-header" id="historySummaryTitle" style="margin-bottom:0;">Saved Figures</div>
+          <div class="history-count" id="historyCount">0 items</div>
+        </section>
+
+        <section class="history-grid" id="historyGrid" aria-live="polite"></section>
+
+        <section class="card history-empty" id="historyEmpty" hidden>
+          <div class="panel-header" id="historyEmptyTitle">No history yet</div>
+          <div class="guide-copy" id="historyEmptyBody">Saved outputs will appear here after a run writes files into outputs/.</div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="history-delete-dialog" id="historyDeleteDialog">
+      <form method="dialog" class="history-delete-dialog-inner">
+        <h3 id="historyDeleteTitle">Delete this run?</h3>
+        <p id="historyDeleteBody">This removes the job folder and all artifacts.</p>
+        <div class="history-delete-actions">
+          <button type="submit" class="ghost" value="cancel" id="historyDeleteCancel">Cancel</button>
+          <button type="submit" class="primary" value="confirm" id="historyDeleteConfirm">Delete</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

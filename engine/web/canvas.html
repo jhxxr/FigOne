@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · Canvas</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="canvas">
+    <div class="canvas-page canvas-page-shell">
+      <header class="topbar canvas-topbar">
+        <div class="canvas-topbar-left">
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="canvasBrandTitle">FigOne Canvas</span>
+          </a>
+          <div class="canvas-status-chip">
+            <span class="canvas-status-dot" id="canvasStatusDot" data-state="waiting"></span>
+            <span id="canvasStatusLabel">Status:</span>
+            <span id="statusText">Waiting</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions canvas-topbar-actions">
+          <button class="ghost pipeline-toggle-btn" id="pipelineToggleBtn" type="button" title="Toggle progress panel">
+            <span class="pipeline-pulse-dot"></span>
+            <span id="topbarProgressText">0% · Ready</span>
+          </button>
+
+          <div class="svg-rerun-controls" id="svgRerunControls" hidden>
+            <label class="svg-rerun-label" id="svgRerunScaleLabel" for="canvasMultimodalImageScale">SVG preview</label>
+            <select id="canvasMultimodalImageScale" class="input svg-rerun-select" title="Multimodal preview quality">
+              <option value="1">Original 100%</option>
+              <option value="0.75">High 75%</option>
+              <option value="0.5" selected>Balanced 50%</option>
+              <option value="0.4">Compressed 40%</option>
+              <option value="0.25">Small 25%</option>
+            </select>
+            <label class="svg-rerun-label" id="canvasSvgModelLabel" for="canvasSvgModel">SVG model</label>
+            <input
+              id="canvasSvgModel"
+              class="input svg-rerun-select svg-rerun-model"
+              type="text"
+              list="canvasSvgModelOptions"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="gemini-3.1-pro-preview"
+              title="SVG multimodal model"
+            />
+            <datalist id="canvasSvgModelOptions">
+              <option value="gemini-3.1-pro-preview"></option>
+              <option value="gpt-5.5"></option>
+              <option value="claude-3-7-sonnet"></option>
+              <option value="google/gemini-3.1-pro-preview"></option>
+            </datalist>
+            <button class="ghost primary" id="regenerateSvgBtn" type="button">Regenerate SVG</button>
+          </div>
+
+          <button class="ghost" id="backToConfigBtn" type="button">Back to Config</button>
+          <button class="ghost primary" id="resumeJobBtn" type="button" hidden>Continue from checkpoint</button>
+          <a class="ghost topbar-link history-action" id="canvasHistoryBtn" href="/history.html">History</a>
+          <button class="ghost" id="logToggle" type="button">Logs</button>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+          <div class="job-pill"><span id="canvasJobLabel">Job</span> <span id="jobId"></span></div>
+        </div>
+      </header>
+
+      <main class="canvas-main">
+        <aside class="step-rail" id="stepRail" aria-label="Pipeline steps">
+          <button type="button" class="step-rail-item is-pending" data-step-id="1" title="Generate / Import">
+            <span class="step-rail-num">1</span>
+            <span class="step-rail-label" data-step-label="1">Gen</span>
+          </button>
+          <button type="button" class="step-rail-item is-pending" data-step-id="2" title="SAM segmentation">
+            <span class="step-rail-num">2</span>
+            <span class="step-rail-label" data-step-label="2">SAM</span>
+          </button>
+          <button type="button" class="step-rail-item is-pending" data-step-id="3" title="Icon matting">
+            <span class="step-rail-num">3</span>
+            <span class="step-rail-label" data-step-label="3">Cut</span>
+          </button>
+          <button type="button" class="step-rail-item is-pending" data-step-id="4" title="SVG rebuild">
+            <span class="step-rail-num">4</span>
+            <span class="step-rail-label" data-step-label="4">SVG</span>
+          </button>
+          <button type="button" class="step-rail-item is-pending" data-step-id="5" title="Final assembly">
+            <span class="step-rail-num">5</span>
+            <span class="step-rail-label" data-step-label="5">Done</span>
+          </button>
+          <button type="button" class="step-rail-collapse" id="stepRailToggle" title="Collapse steps">‹</button>
+        </aside>
+
+        <section class="canvas-stage canvas-stage-center">
+          <div class="canvas-shell">
+            <iframe id="svgEditorFrame" class="svg-frame" title="SVG-Edit Canvas"></iframe>
+            <div id="svgFallback" class="svg-fallback">
+              <div class="fallback-title" id="fallbackTitle">SVG-Edit not ready</div>
+              <div class="fallback-body" id="fallbackBody">Loading vector artifacts...</div>
+              <object id="fallbackObject" type="image/svg+xml" class="fallback-object"></object>
+            </div>
+          </div>
+
+          <section class="pipeline-overlay" id="pipelineOverlay">
+            <div class="pipeline-card">
+              <div class="pipeline-header">
+                <div class="pipeline-header-info">
+                  <div class="eyebrow" id="pipelineEyebrow">PIPELINE EXECUTION</div>
+                  <h2 class="pipeline-title" id="pipelineTitle">Academic figure reconstruction pipeline</h2>
+                  <p class="pipeline-subtitle" id="pipelineSubtitle">
+                    Running multi-stage detection, segmentation, and vector SVG rebuild
+                  </p>
+                </div>
+                <div class="pipeline-header-meta">
+                  <span class="status-badge is-ready" id="pipelineStatusBadge">Running</span>
+                  <span class="pipeline-timer" id="pipelineTimer">⏱️ 00:00</span>
+                </div>
+              </div>
+
+              <div class="pipeline-stepper" id="pipelineStepper">
+                <div class="step-item is-active" data-step-id="1">
+                  <div class="step-indicator">
+                    <span class="step-num">1</span>
+                    <span class="step-icon">🎨</span>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Generate / Import</div>
+                    <div class="step-desc">figure.png</div>
+                    <div class="step-preview" id="step1Preview"></div>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item is-pending" data-step-id="2">
+                  <div class="step-indicator">
+                    <span class="step-num">2</span>
+                    <span class="step-icon">🔍</span>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">SAM segmentation</div>
+                    <div class="step-desc">samed.png</div>
+                    <div class="step-preview" id="step2Preview"></div>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item is-pending" data-step-id="3">
+                  <div class="step-indicator">
+                    <span class="step-num">3</span>
+                    <span class="step-icon">✂️</span>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Icon matting</div>
+                    <div class="step-desc">RMBG-2.0 cutout</div>
+                    <div class="step-preview" id="step3Preview"></div>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item is-pending" data-step-id="4">
+                  <div class="step-indicator">
+                    <span class="step-num">4</span>
+                    <span class="step-icon">📐</span>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">SVG rebuild</div>
+                    <div class="step-desc">template.svg</div>
+                    <div class="step-preview" id="step4Preview"></div>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item is-pending" data-step-id="5">
+                  <div class="step-indicator">
+                    <span class="step-num">5</span>
+                    <span class="step-icon">🎯</span>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Final assembly</div>
+                    <div class="step-desc">final.svg canvas</div>
+                    <div class="step-preview" id="step5Preview"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pipeline-progress-section">
+                <div class="pipeline-progress-header">
+                  <span class="pipeline-progress-label" id="pipelineCurrentStageText">
+                    Step 1: Preparing academic raster figure...
+                  </span>
+                  <span class="pipeline-progress-percent" id="pipelinePercent">0%</span>
+                </div>
+                <div class="pipeline-progress-track">
+                  <div class="pipeline-progress-fill" id="pipelineProgressBar" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="pipeline-terminal-snippet">
+                <div class="terminal-dot"></div>
+                <span class="terminal-line" id="pipelineLiveLog" data-i18n-default="1">
+                  Waiting for engine log output...
+                </span>
+              </div>
+
+              <div class="pipeline-footer">
+                <button type="button" class="ghost" id="pipelineToggleLogsBtn">
+                  <span>View live detailed logs</span>
+                </button>
+                <button type="button" class="ghost" id="pipelineHideOverlayBtn">
+                  <span>Open canvas</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <aside class="canvas-side-panel" id="canvasSidePanel">
+          <div class="side-panel-tabs" role="tablist">
+            <button type="button" class="side-panel-tab is-active" data-panel-tab="progress" id="sideTabProgress">
+              Progress
+            </button>
+            <button type="button" class="side-panel-tab" data-panel-tab="artifacts" id="sideTabArtifacts">
+              Artifacts
+            </button>
+            <button type="button" class="side-panel-tab" data-panel-tab="logs" id="sideTabLogs">
+              Logs
+            </button>
+          </div>
+
+          <div class="side-panel-body" data-panel-body="progress" id="sidePanelProgress">
+            <div class="side-progress-summary">
+              <div class="eyebrow" id="sideProgressEyebrow">LIVE PIPELINE</div>
+              <div class="side-progress-title" id="sideProgressTitle">Waiting to start</div>
+              <div class="side-progress-meta">
+                <span id="sideProgressPercent">0%</span>
+                <span id="sideProgressTimer">⏱️ 00:00</span>
+              </div>
+              <div class="side-progress-track">
+                <div class="side-progress-fill" id="sideProgressFill" style="width: 0%"></div>
+              </div>
+              <div class="side-live-log" id="sideLiveLog">Waiting for engine log output...</div>
+              <button type="button" class="ghost side-open-detail" id="sideOpenPipelineBtn">
+                Expand full progress card
+              </button>
+            </div>
+          </div>
+
+          <div class="side-panel-body" data-panel-body="artifacts" id="artifactPanel" hidden>
+            <div class="panel-header" id="artifactPanelTitle">Artifacts</div>
+            <div class="artifact-list" id="artifactList"></div>
+            <div class="side-empty" id="artifactEmptyHint">Artifacts appear as each stage finishes.</div>
+          </div>
+
+          <div class="side-panel-body" data-panel-body="logs" id="logPanel" hidden>
+            <div class="panel-header logs-panel-header">
+              <span id="logPanelTitle">Engine logs</span>
+              <input
+                type="search"
+                class="logs-filter-input"
+                id="logsFilterInput"
+                placeholder="Filter logs..."
+                autocomplete="off"
+              />
+            </div>
+            <div class="log-body" id="logBody"></div>
+          </div>
+        </aside>
+
+        <button class="fab canvas-fab-hidden" id="artifactToggle" type="button" aria-label="Artifacts" hidden>
+          Artifacts
+        </button>
+      </main>
+    </div>
+
+    <dialog class="artifact-lightbox" id="artifactLightbox">
+      <form method="dialog" class="artifact-lightbox-inner">
+        <header class="artifact-lightbox-header">
+          <strong id="artifactLightboxTitle">Preview</strong>
+          <button type="submit" class="ghost" id="artifactLightboxClose">Close</button>
+        </header>
+        <div class="artifact-lightbox-body">
+          <img id="artifactLightboxImage" alt="" hidden />
+          <object id="artifactLightboxObject" type="image/svg+xml" hidden></object>
+        </div>
+        <footer class="artifact-lightbox-footer">
+          <a class="ghost primary" id="artifactLightboxOpen" href="#" target="_blank" rel="noreferrer">Open original</a>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

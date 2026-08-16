@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FigOne",
+  "version": "0.1.22",
+  "identifier": "com.figone.desktop",
+  "build": {
+    "frontendDist": "../engine/web"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../engine/autofigure2.py": "engine/autofigure2.py",
+      "../engine/bootstrap_sam3.py": "engine/bootstrap_sam3.py",
+      "../engine/requirements-runtime.txt": "engine/requirements-runtime.txt",
+      "../engine/server.py": "engine/server.py",
+      "../engine/web": "engine/web",
+      "../engine/sam3-src/LICENSE": "engine/sam3-src/LICENSE",
+      "../engine/sam3-src/MANIFEST.in": "engine/sam3-src/MANIFEST.in",
+      "../engine/sam3-src/pyproject.toml": "engine/sam3-src/pyproject.toml",
+      "../engine/sam3-src/sam3": "engine/sam3-src/sam3",
+      "../engine/rmbg2-src": "engine/rmbg2-src",
+      "../engine/python": "engine/python"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

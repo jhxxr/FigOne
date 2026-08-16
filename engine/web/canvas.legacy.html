@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · Canvas</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="canvas">
+    <div class="canvas-page">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="canvasBrandTitle">FigOne Canvas</span>
+          </a>
+          <div class="subtitle">
+            <span id="canvasStatusLabel">Status:</span> <span id="statusText">Waiting</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost pipeline-toggle-btn" id="pipelineToggleBtn" type="button">
+            <span class="pipeline-pulse-dot"></span>
+            <span id="topbarProgressText">0% · Ready</span>
+          </button>
+          <div class="svg-rerun-controls" id="svgRerunControls" hidden>
+            <label class="svg-rerun-label" id="svgRerunScaleLabel" for="canvasMultimodalImageScale">SVG preview</label>
+            <select id="canvasMultimodalImageScale" class="input svg-rerun-select" title="Multimodal preview quality">
+              <option value="1">Original 100%</option>
+              <option value="0.75">High 75%</option>
+              <option value="0.5" selected>Balanced 50%</option>
+              <option value="0.4">Compressed 40%</option>
+              <option value="0.25">Small 25%</option>
+            </select>
+            <button class="ghost primary" id="regenerateSvgBtn" type="button">Regenerate SVG</button>
+          </div>
+          <button class="ghost" id="backToConfigBtn">Back to Config</button>
+          <button class="ghost primary" id="resumeJobBtn" hidden>Continue from checkpoint</button>
+          <a class="ghost topbar-link history-action" id="canvasHistoryBtn" href="/history.html">History</a>
+          <button class="ghost" id="logToggle">Logs</button>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+          <div class="job-pill"><span id="canvasJobLabel">Job</span> <span id="jobId"></span></div>
+        </div>
+      </header>
+
+      <main class="canvas-stage">
+        <!-- SVG Canvas Shell -->
+        <div class="canvas-shell">
+          <iframe
+            id="svgEditorFrame"
+            class="svg-frame"
+            title="SVG-Edit Canvas"
+          ></iframe>
+          <div id="svgFallback" class="svg-fallback">
+            <div class="fallback-title" id="fallbackTitle">SVG-Edit not ready</div>
+            <div class="fallback-body" id="fallbackBody">
+              Loading vector artifacts...
+            </div>
+            <object id="fallbackObject" type="image/svg+xml" class="fallback-object"></object>
+          </div>
+        </div>
+
+        <!-- Real-time Pipeline Progress Overlay -->
+        <section class="pipeline-overlay" id="pipelineOverlay">
+          <div class="pipeline-card">
+            <!-- Header -->
+            <div class="pipeline-header">
+              <div class="pipeline-header-info">
+                <div class="eyebrow" id="pipelineEyebrow">PIPELINE EXECUTION</div>
+                <h2 class="pipeline-title" id="pipelineTitle">Academic figure reconstruction pipeline</h2>
+                <p class="pipeline-subtitle" id="pipelineSubtitle">Running multi-stage detection, segmentation, and vector SVG rebuild</p>
+              </div>
+              <div class="pipeline-header-meta">
+                <span class="status-badge is-ready" id="pipelineStatusBadge">Running</span>
+                <span class="pipeline-timer" id="pipelineTimer">⏱️ 00:00</span>
+              </div>
+            </div>
+
+            <!-- Milestone Stepper (5 Interactive Steps) -->
+            <div class="pipeline-stepper" id="pipelineStepper">
+              <div class="step-item is-active" data-step-id="1">
+                <div class="step-indicator">
+                  <span class="step-num">1</span>
+                  <span class="step-icon">🎨</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Generate / Import</div>
+                  <div class="step-desc">figure.png</div>
+                  <div class="step-preview" id="step1Preview"></div>
+                </div>
+              </div>
+              <div class="step-connector"></div>
+              <div class="step-item is-pending" data-step-id="2">
+                <div class="step-indicator">
+                  <span class="step-num">2</span>
+                  <span class="step-icon">🔍</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">SAM segmentation</div>
+                  <div class="step-desc">samed.png</div>
+                  <div class="step-preview" id="step2Preview"></div>
+                </div>
+              </div>
+              <div class="step-connector"></div>
+              <div class="step-item is-pending" data-step-id="3">
+                <div class="step-indicator">
+                  <span class="step-num">3</span>
+                  <span class="step-icon">✂️</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Icon matting</div>
+                  <div class="step-desc">RMBG-2.0 cutout</div>
+                  <div class="step-preview" id="step3Preview"></div>
+                </div>
+              </div>
+              <div class="step-connector"></div>
+              <div class="step-item is-pending" data-step-id="4">
+                <div class="step-indicator">
+                  <span class="step-num">4</span>
+                  <span class="step-icon">📐</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">SVG rebuild</div>
+                  <div class="step-desc">template.svg</div>
+                  <div class="step-preview" id="step4Preview"></div>
+                </div>
+              </div>
+              <div class="step-connector"></div>
+              <div class="step-item is-pending" data-step-id="5">
+                <div class="step-indicator">
+                  <span class="step-num">5</span>
+                  <span class="step-icon">🎯</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Final assembly</div>
+                  <div class="step-desc">final.svg canvas</div>
+                  <div class="step-preview" id="step5Preview"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Main Progress Bar -->
+            <div class="pipeline-progress-section">
+              <div class="pipeline-progress-header">
+                <span class="pipeline-progress-label" id="pipelineCurrentStageText">Step 1: Preparing academic raster figure...</span>
+                <span class="pipeline-progress-percent" id="pipelinePercent">0%</span>
+              </div>
+              <div class="pipeline-progress-track">
+                <div class="pipeline-progress-fill" id="pipelineProgressBar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Live Terminal Snippet -->
+            <div class="pipeline-terminal-snippet">
+              <div class="terminal-dot"></div>
+              <span class="terminal-line" id="pipelineLiveLog" data-i18n-default="1">Waiting for engine log output...</span>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="pipeline-footer">
+              <button type="button" class="ghost" id="pipelineToggleLogsBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                <span>View live detailed logs</span>
+              </button>
+              <button type="button" class="ghost" id="pipelineHideOverlayBtn">
+                <span>Open canvas</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Artifacts Floating Button & Drawer -->
+        <button class="fab" id="artifactToggle" aria-label="Artifacts">
+          <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v10h14V7H5zm2 8l3-3 2 2 3-3 4 4H7z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+
+        <aside class="artifact-panel" id="artifactPanel">
+          <div class="panel-header" id="artifactPanelTitle">Artifacts</div>
+          <div class="artifact-list" id="artifactList"></div>
+        </aside>
+
+        <!-- Logs Panel -->
+        <aside class="log-panel" id="logPanel">
+          <div class="panel-header" id="logPanelTitle">Engine logs</div>
+          <div class="log-body" id="logBody"></div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

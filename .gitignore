@@ -1,0 +1,43 @@
+# Build output and generated data
+**/target/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/*.egg-info/
+engine/runtime/
+engine/runtime-test/
+engine/uploads/
+engine/outputs/
+engine/hf_cache/
+# Local/dev Python stubs — never commit empty or machine-specific runtimes
+engine/python/
+
+# Embedded development repository metadata and unused upstream files
+engine/sam3-src/.git/
+engine/sam3-src/.github/
+engine/sam3-src/.gitignore
+engine/sam3-src/CODE_OF_CONDUCT.md
+engine/sam3-src/CONTRIBUTING.md
+engine/sam3-src/README.md
+engine/sam3-src/README_TRAIN.md
+engine/sam3-src/RELEASE_SAM3p1.md
+engine/sam3-src/assets/
+engine/sam3-src/examples/
+engine/sam3-src/scripts/
+engine/sam3-src/test/
+
+# Models and local configuration
+*.pt
+*.pth
+*.bin
+*.ckpt
+*.safetensors
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

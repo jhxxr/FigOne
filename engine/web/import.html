@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · Import Figure</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="import">
+    <div class="page page-workflow">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="importBrandTitle">Import Stage-1 Figure</span>
+          </a>
+          <div class="subtitle" id="importPageSubtitle">
+            Skip step 1 generation and continue from an existing academic figure.
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost topbar-link" id="importGuideBtn" href="/guide.html">I don't know how to fill this</a>
+          <a class="ghost topbar-link" id="importModelsBtn" href="/models.html">Models & Providers</a>
+          <a class="ghost topbar-link history-action" id="importHistoryBtn" href="/history.html">History</a>
+          <a class="ghost topbar-link" id="importBackLink" href="/">Back to Method Workflow</a>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="workflow-layout">
+        <section class="card workflow-hero-card">
+          <div class="workflow-hero-kicker">IMPORT WORKFLOW</div>
+          <h1 class="workflow-hero-title" id="importWorkflowTitle">Continue from an existing figure</h1>
+          <p class="workflow-hero-copy" id="importWorkflowCopy">
+            Upload stage-1 figure.png, choose a provider profile, then run SAM and SVG reconstruction.
+          </p>
+
+          <div class="field-group">
+            <label class="field-label" id="importFigureLabel" for="importFigureFile">Stage-1 Figure</label>
+            <div class="upload-zone upload-zone-hero" id="importUploadZone">
+              <input id="importFigureFile" class="file-input" type="file" accept="image/*" />
+              <div class="upload-text" id="importUploadText">
+                Drop the first-stage academic figure here or click to upload
+              </div>
+            </div>
+            <div class="hint" id="importFigureHint">
+              This image becomes <code>figure.png</code>. The pipeline will start from SAM
+              segmentation and SVG reconstruction.
+            </div>
+            <div class="import-preview-block">
+              <img id="importFigurePreview" class="stage-preview" alt="Imported figure preview" />
+              <div id="importFigureStatus" class="hint"></div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <label class="field-label" id="importProfilePickerLabel" for="importProviderProfileSelect">Provider Profile</label>
+              <div class="field-caption" id="importProfilePickerCaption">Saved in Models & Providers. Switch here without re-entering keys.</div>
+            </div>
+            <div id="importProviderProfileEmptyState" class="profile-picker-empty">
+              <div class="provider-empty-icon" aria-hidden="true">+</div>
+              <strong id="importProfilePickerEmptyTitle">No provider saved yet</strong>
+              <span id="importProfilePickerEmptyCopy">Add a provider once in Models & Providers, then come back to continue from this figure.</span>
+              <a class="ghost" id="importProfilePickerEmptyLink" href="/models.html">Add provider</a>
+            </div>
+            <div id="importProviderProfilePicker" class="profile-picker" hidden>
+              <select id="importProviderProfileSelect" class="input"></select>
+              <article class="profile-picker-card">
+                <div class="profile-picker-card-top">
+                  <div>
+                    <div class="profile-picker-name" id="importProviderProfileName"></div>
+                    <div class="profile-picker-meta" id="importProviderProfileMeta"></div>
+                  </div>
+                  <a class="ghost" id="importProviderProfileManageLink" href="/models.html">Manage</a>
+                </div>
+              </article>
+            </div>
+            <div class="hint" id="importBianxieRegisterHint" hidden>
+              Register at <a href="https://bianxieai.com/autofigure" target="_blank" rel="noopener noreferrer">bianxieai</a>.
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <label class="field-label" id="importRouteLabel">Import Route</label>
+              <div class="field-caption" id="importRouteCaption">Only SAM and SVG stages remain in this workflow.</div>
+            </div>
+            <div class="route-summary">
+              <div class="route-row">
+                <span class="route-label" id="importWorkflowLabel">Workflow</span>
+                <strong class="route-value" id="importWorkflowValue">Imported Figure -> SAM -> SVG</strong>
+              </div>
+              <div class="route-row">
+                <span class="route-label" id="importStep1Label">Step 1</span>
+                <strong class="route-value" id="importStep1Value">Skipped</strong>
+              </div>
+              <div class="route-note" id="importRouteNote">
+                The default 4K aspect-ratio-preserving preprocessing still applies after import.
+              </div>
+            </div>
+          </div>
+
+          <div class="workflow-launch">
+            <button id="importConfirmBtn" class="primary workflow-primary-btn">Continue From Uploaded Figure</button>
+            <div id="importErrorMsg" class="error"></div>
+          </div>
+        </section>
+
+        <details class="card workflow-advanced-card" open>
+          <summary class="workflow-advanced-summary">
+            <span id="importAdvancedOptionsTitle">Advanced options</span>
+            <span class="workflow-advanced-badge">Optional</span>
+          </summary>
+          <div class="workflow-advanced-body">
+            <div class="field-group">
+              <div class="field-header">
+                <label class="field-label" id="importMultimodalScaleLabel" for="importMultimodalImageScale">Multimodal preview quality</label>
+                <div class="field-caption" id="importMultimodalScaleCaption">
+                  Only compresses images sent to the SVG model. Source files, SAM3, SVG canvas size, and final icons stay full resolution.
+                </div>
+              </div>
+              <select id="importMultimodalImageScale" class="input">
+                <option value="1">Original (100%)</option>
+                <option value="0.75">High (75%)</option>
+                <option value="0.5" selected>Balanced (50%, recommended)</option>
+                <option value="0.4">Compressed (40%)</option>
+                <option value="0.25">Small (25%)</option>
+              </select>
+            </div>
+
+            <div class="field-grid-2">
+              <div class="field-group">
+                <label class="field-label" id="importSamBackendLabel" for="importSamBackend">SAM3 Backend</label>
+                <select id="importSamBackend" class="input">
+                  <option value="local" selected>Local (SAM3)</option>
+                  <option value="fal">fal.ai API</option>
+                  <option value="roboflow">Roboflow API</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" id="importSamPromptLabel" for="importSamPrompt">SAM Prompt</label>
+                <input
+                  id="importSamPrompt"
+                  type="text"
+                  class="input"
+                  value="icon,person,robot,animal"
+                  placeholder="icon,person,robot,animal"
+                />
+              </div>
+            </div>
+
+            <div class="field-group" id="importSamApiKeyGroup" hidden>
+              <label class="field-label" id="importSamApiKeyLabel" for="importSamApiKey">SAM3 API Key</label>
+              <input
+                id="importSamApiKey"
+                type="password"
+                class="input"
+                placeholder="FAL/Roboflow API key"
+              />
+            </div>
+          </div>
+        </details>
+
+        <div hidden>
+          <input id="importProvider" type="hidden" value="bianxie" />
+          <input id="importSvgModel" type="hidden" value="gemini-3.1-pro-preview" />
+          <input id="importApiKey" type="hidden" value="" />
+          <input id="importBaseUrl" type="hidden" value="" />
+        </div>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

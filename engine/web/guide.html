@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoFigure-Edit Guide</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="guide">
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span id="guideBrandTitle">Configuration Guide</span>
+          </a>
+          <div class="subtitle" id="guideSubtitle">
+            A practical guide for each field, each workflow, and recommended presets.
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost topbar-link" id="guideBackInputBtn" href="/">Back to Method Workflow</a>
+          <a class="ghost topbar-link" id="guideBackImportBtn" href="/import.html">Back to Import Workflow</a>
+          <a class="ghost topbar-link history-action" id="guideHistoryBtn" href="/history.html">History</a>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="guide-layout">
+        <section class="card">
+          <div class="panel-header" id="guideOverviewTitle">Choose the Right Workflow</div>
+          <div class="guide-copy" id="guideOverviewCopy">
+            Start from method text if you want the full pipeline. Start from import mode if you
+            already have the stage-1 academic raster figure and only want SAM + SVG.
+          </div>
+          <div class="guide-grid">
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideMethodKicker">Workflow A</div>
+              <div class="guide-block-title" id="guideMethodTitle">Method Text Workflow</div>
+              <div class="guide-copy" id="guideMethodCopy">
+                Use the main page when you want AutoFigure-Edit to generate the first-stage image
+                for you.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideImportKicker">Workflow B</div>
+              <div class="guide-block-title" id="guideImportTitle">Import Existing Figure</div>
+              <div class="guide-copy" id="guideImportCopy">
+                Use the import page when you already have the academic raster figure and want to
+                continue directly from segmentation and SVG reconstruction.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guidePresetsTitle">Recommended Presets</div>
+          <div class="guide-grid">
+            <article class="guide-block">
+              <div class="guide-block-title" id="guidePreset1Title">Preset 1: OpenAI Main Route</div>
+              <div class="guide-copy" id="guidePreset1Copy">
+                SVG / Reasoning Provider: OpenAI Responses. Step 1 Image Provider: Same as SVG path.
+                Image Model: gpt-image-2. SVG Model: gpt-4.1.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guidePreset2Title">Preset 2: Gemini + OpenAI Images</div>
+              <div class="guide-copy" id="guidePreset2Copy">
+                SVG / Reasoning Provider: Gemini. Step 1 Image Provider: OpenAI Images. Image Model:
+                gpt-image-2. Use this if you prefer Gemini SVG reconstruction but OpenAI image generation.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guidePreset3Title">Preset 3: Custom Relay</div>
+              <div class="guide-copy" id="guidePreset3Copy">
+                Choose Custom and fill Custom API URL when you use an OpenAI-compatible relay or your
+                own gateway. Keep the default Custom endpoint if it already works for you.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guidePipelineStepsTitle">What the Pipeline Actually Does</div>
+          <div class="guide-grid">
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideStep1Kicker">Step 1</div>
+              <div class="guide-block-title" id="guideStep1Title">Generate or Import figure.png</div>
+              <div class="guide-copy" id="guideStep1Copy">
+                The system either generates the academic raster figure from method text, or accepts
+                your uploaded stage-1 figure directly.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideStep2Kicker">Step 2</div>
+              <div class="guide-block-title" id="guideStep2Title">Run SAM3 segmentation</div>
+              <div class="guide-copy" id="guideStep2Copy">
+                SAM3 detects icon-like regions and creates labeled placeholders plus box metadata.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideStep3Kicker">Step 3</div>
+              <div class="guide-block-title" id="guideStep3Title">Crop icons and remove background</div>
+              <div class="guide-copy" id="guideStep3Copy">
+                Each detected icon is cropped and cleaned so later replacement in SVG becomes easier.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideStep4Kicker">Step 4</div>
+              <div class="guide-block-title" id="guideStep4Title">Rebuild as SVG</div>
+              <div class="guide-copy" id="guideStep4Copy">
+                The multimodal model reconstructs the figure as editable SVG while respecting the
+                placeholder layout from SAM.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-kicker" id="guideStep5Kicker">Step 5</div>
+              <div class="guide-block-title" id="guideStep5Title">Replace placeholders and finalize</div>
+              <div class="guide-copy" id="guideStep5Copy">
+                Placeholder boxes are replaced by processed icons and the final SVG is written for
+                editing or export.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guideMainStepsTitle">Main Page: Step-by-Step Filling Guide</div>
+          <div class="guide-list">
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideMainStep1Title">1. Paste method text</div>
+              <div class="guide-copy" id="guideMainStep1Copy">
+                Start with the method section, not the abstract. Include the pipeline logic,
+                components, arrows, stages, and notable visual entities that should appear in the figure.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideMainStep2Title">2. Choose SVG / Reasoning Provider</div>
+              <div class="guide-copy" id="guideMainStep2Copy">
+                This decides how SVG reconstruction works. If you do not want to think too much, use
+                OpenAI Responses or Gemini first.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideMainStep3Title">3. Decide whether step 1 should follow or override</div>
+              <div class="guide-copy" id="guideMainStep3Copy">
+                Keep Step 1 Image Provider linked unless you specifically want a different image
+                model or a different service for the raster generation stage.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideMainStep4Title">4. Fill API key and Custom URL only when needed</div>
+              <div class="guide-copy" id="guideMainStep4Copy">
+                For OpenAI Responses + linked OpenAI Images, one compatible API key is often enough.
+                Fill Custom API URL only if you selected Custom on that route.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideMainStep5Title">5. Tune image model, SVG model, and SAM settings</div>
+              <div class="guide-copy" id="guideMainStep5Copy">
+                Leave the defaults first, then only adjust model ids or SAM prompt/backend if you
+                know what is failing or what visual style you need.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guideImportStepsTitle">Import Page: Step-by-Step Filling Guide</div>
+          <div class="guide-list">
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideImportStep1Title">1. Upload the stage-1 academic figure</div>
+              <div class="guide-copy" id="guideImportStep1Copy">
+                This should be the raster figure that normally would have been produced by step 1.
+                Do not upload the reference image or a final SVG here.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideImportStep2Title">2. Choose only the SVG / reasoning route</div>
+              <div class="guide-copy" id="guideImportStep2Copy">
+                Import mode skips image generation, so there is no step 1 image provider to fill.
+                You only need to decide how SAM and SVG reconstruction should continue.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideImportStep3Title">3. Fill SVG model and API key</div>
+              <div class="guide-copy" id="guideImportStep3Copy">
+                Use the default SVG model first. Change it only if you know your provider exposes a
+                better model for multimodal SVG reconstruction.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideImportStep4Title">4. Configure SAM backend</div>
+              <div class="guide-copy" id="guideImportStep4Copy">
+                SAM still runs in import mode. You must choose whether it uses local SAM3, fal.ai,
+                or Roboflow, and provide the corresponding key if the backend requires one.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guideFieldsTitle">What Each Field Means</div>
+          <div class="guide-list">
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldMethodTitle">Method Text</div>
+              <div class="guide-copy" id="guideFieldMethodCopy">
+                Paste the method section of your paper. The cleaner and more structural it is, the
+                better the generated figure tends to be.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldProviderTitle">SVG / Reasoning Provider</div>
+              <div class="guide-copy" id="guideFieldProviderCopy">
+                Controls the text reasoning and the multimodal SVG reconstruction stage. This is the
+                most important provider selector on the page.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldImageProviderTitle">Step 1 Image Provider</div>
+              <div class="guide-copy" id="guideFieldImageProviderCopy">
+                Controls only the first-stage raster image generation. Leave it linked if you do not
+                need to separate the image path from the SVG path.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldCustomUrlTitle">Custom API URL</div>
+              <div class="guide-copy" id="guideFieldCustomUrlCopy">
+                Used only when the route is Custom. Fill the OpenAI-compatible base URL provided by
+                your relay or gateway.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldImageModelTitle">Image Model</div>
+              <div class="guide-copy" id="guideFieldImageModelCopy">
+                Default is gpt-image-2 for OpenAI Images. You can manually replace it with any
+                compatible image model id if needed.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldSvgModelTitle">SVG Model</div>
+              <div class="guide-copy" id="guideFieldSvgModelCopy">
+                Default follows the selected reasoning route. Use gpt-4.1 or gpt-5.5 on OpenAI
+                Responses, and the Gemini defaults on Gemini/OpenRouter/Custom unless you know you
+                need a different id.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldUpscaleTitle">Auto Upscale</div>
+              <div class="guide-copy" id="guideFieldUpscaleCopy">
+                Enabled by default. It enlarges figure.png to a 4K long edge while preserving aspect
+                ratio. Keep it on unless you specifically want the original resolution.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideFieldSamTitle">SAM Settings</div>
+              <div class="guide-copy" id="guideFieldSamCopy">
+                SAM Backend selects how segmentation runs. SAM Prompt controls what objects the model
+                should try to detect, such as icons, people, robots, or animals.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guideSamTitle">SAM3 Backend Guide</div>
+          <div class="guide-grid">
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamLocalTitle">Local (SAM3)</div>
+              <div class="guide-copy" id="guideSamLocalCopy">
+                Best when you already installed SAM3 locally and want everything on your own
+                machine. No external API key is needed, but local dependencies must be ready.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamFalTitle">fal.ai API</div>
+              <div class="guide-copy" id="guideSamFalCopy">
+                Good if you do not want to install SAM3 locally and you have a FAL key. Usually
+                stable, but it is an external paid API route.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamRoboflowTitle">Roboflow API</div>
+              <div class="guide-copy" id="guideSamRoboflowCopy">
+                Often the easiest hosted SAM option. Use this when you want a remote backend and
+                your environment can reach the Roboflow endpoint.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamPromptTitle">How to Fill SAM Prompt</div>
+              <div class="guide-copy" id="guideSamPromptCopy">
+                Think of SAM Prompt as the object vocabulary. Use comma-separated words such as
+                `icon,person,robot,animal` or add domain words like `diagram,cell,molecule,arrow`.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamWhenTitle">When to Change SAM Backend</div>
+              <div class="guide-copy" id="guideSamWhenCopy">
+                If local SAM3 is unavailable, switch to fal.ai or Roboflow. If remote APIs are slow
+                or inaccessible, local becomes the fallback if your environment supports it.
+              </div>
+            </article>
+            <article class="guide-block">
+              <div class="guide-block-title" id="guideSamKeyTitle">When a SAM API Key Is Required</div>
+              <div class="guide-copy" id="guideSamKeyCopy">
+                Local does not need a SAM API key. fal.ai needs a FAL key. Roboflow needs a
+                Roboflow key. If the SAM backend is local, leave the SAM API key blank.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="panel-header" id="guideExamplesTitle">Common Filling Examples</div>
+          <div class="guide-list">
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideExample1Title">I only want the easiest stable setup</div>
+              <div class="guide-copy" id="guideExample1Copy">
+                Main page. Provider = OpenAI Responses. Image Provider = Same as SVG path. Image Model = gpt-image-2. SVG Model = gpt-4.1. Fill one API key.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideExample2Title">I already have the stage-1 figure</div>
+              <div class="guide-copy" id="guideExample2Copy">
+                Import page. Upload the figure. Choose Provider = OpenAI Responses or Gemini. Fill SVG Model and API Key. Leave image settings alone because step 1 is skipped.
+              </div>
+            </article>
+            <article class="guide-item">
+              <div class="guide-item-title" id="guideExample3Title">I use a relay / private API gateway</div>
+              <div class="guide-copy" id="guideExample3Copy">
+                Choose Custom on the route you want to redirect. Fill Custom API URL with your gateway base URL, then fill the matching API key.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card guide-help-card">
+          <div class="guide-help-banner">
+            <div class="guide-help-side">
+              <div class="guide-help-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" class="guide-help-icon-svg">
+                  <path
+                    d="M12 3c-4.97 0-9 3.58-9 8 0 2.3 1.09 4.37 2.84 5.83V21l4.08-2.24c.67.16 1.37.24 2.08.24 4.97 0 9-3.58 9-8s-4.03-8-9-8Zm-1.06 11.56h-1.9v-1.9h1.9v1.9Zm2.56-4.5-.8.56c-.54.38-.76.68-.76 1.34v.26h-1.84v-.38c0-1 .32-1.68 1.2-2.3l1.1-.78c.4-.28.66-.62.66-1.1 0-.8-.64-1.3-1.56-1.3-.98 0-1.7.54-1.82 1.52H8.9c.16-2 1.72-3.12 3.74-3.12 2.16 0 3.56 1.16 3.56 2.98 0 1.1-.48 1.78-1.7 2.64Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </div>
+              <div class="guide-help-badge" id="guideHelpBadge">Need more help?</div>
+            </div>
+            <div class="guide-help-body">
+              <div class="guide-help-title" id="guideHelpTitle">Still not sure?</div>
+              <div class="guide-help-copy" id="guideHelpCopy">
+                Try consulting the project knowledge base for a more detailed explanation and
+                up-to-date context.
+              </div>
+            </div>
+            <a
+              id="guideHelpButton"
+              class="guide-help-button"
+              href="https://deepwiki.com/ResearAI/AutoFigure-Edit"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span id="guideHelpButtonText">Open DeepWiki</span>
+              <svg viewBox="0 0 24 24" class="guide-help-button-icon" aria-hidden="true">
+                <path
+                  d="M7 12h8.17l-3.58 3.59L13 17l6-6-6-6-1.41 1.41L15.17 10H7v2Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </a>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

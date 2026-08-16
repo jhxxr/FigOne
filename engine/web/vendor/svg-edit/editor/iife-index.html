@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge, chrome=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" href="images/logo.svg">
+  <style id="styleoverrides" media="screen"></style>
+  <link href="./svgedit.css" rel="stylesheet" media="all">
+  <style id="figra-embed">
+    /* The editor grid sizes itself with height:100%, so the whole chain needs a height. */
+    html,
+    body,
+    #container {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: #1f1e1b;
+    }
+
+    /* Match Figra's warm neutrals. Tool icons are white, so chrome stays dark.
+       CSS vars also cascade into se-button / se-* shadow roots. */
+    :root {
+      --main-bg-color: #252420;
+      --text-color: #f3f1ea;
+      --border-color: #3f3d37;
+      --canvas-bg-color: #5f5b54;
+      --ruler-color: #cfcabe;
+      --icon-bg-color: #2f2d28;
+      --icon-bg-color-hover: #4a463e;
+      --input-color: #ebe7dc;
+      --orange-color: #c96442;
+      --top-toolbar-min-height: 56px;
+      --figra-accent: #c96442;
+      --figra-accent-strong: #b4542f;
+      --figra-surface: #2c2a25;
+      --figra-surface-2: #35322c;
+      --figra-ink-soft: #c8c4b8;
+    }
+
+    .svg_editor {
+      font-family: "Inter", -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      color: var(--text-color);
+      background:
+        radial-gradient(120% 80% at 0% 0%, rgba(201, 100, 66, 0.08), transparent 42%),
+        var(--main-bg-color);
+      gap: 0;
+    }
+
+    /* Slimmer chrome: keep the SVG-Edit grid, just tighten density. */
+    .svg_editor {
+      grid-template-rows: minmax(var(--top-toolbar-min-height), auto) 14px 1fr 44px;
+      grid-template-columns: 48px 14px 44px 1fr 12px;
+    }
+
+    .svg_editor.open {
+      grid-template-columns: 48px 14px 44px 1fr 240px;
+    }
+
+    #tools_top,
+    #tools_top > * {
+      background: transparent;
+      gap: 2px 4px;
+      padding: 6px 8px 4px 4px;
+    }
+
+    #tools_left {
+      padding: 8px 0 12px;
+      border-right: 1px solid rgba(255, 255, 255, 0.04);
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 28%);
+    }
+
+    #tools_bottom {
+      padding: 0 10px;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    #main_button {
+      margin: 8px 6px 0 8px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--figra-surface);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    }
+
+    #main_icon {
+      width: 108px;
+      line-height: 32px;
+    }
+
+    #main_icon span {
+      font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text-color);
+      padding-left: 36px;
+      line-height: 34px;
+    }
+
+    #main_icon:hover,
+    #main_icon.buttondown {
+      background: var(--figra-surface-2) !important;
+      border-radius: 10px;
+    }
+
+    #main_menu {
+      background: #f7f5ef;
+      color: #1b1a17;
+      border-radius: 12px;
+      border: 1px solid #e4e2da;
+      box-shadow: 0 12px 32px rgba(20, 20, 19, 0.22);
+      padding: 8px;
+      top: -4px;
+      width: 240px;
+    }
+
+    #main_menu li {
+      border-radius: 8px;
+      margin: 0;
+      padding: 8px 10px;
+      line-height: 1.35;
+      color: #2b2a27;
+    }
+
+    #main_menu li:hover {
+      background: #f5ebe5;
+      color: var(--figra-accent-strong);
+    }
+
+    /* Warm stage around the artboard so the white sheet is the subject. */
+    #workarea {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+        #67635c;
+      border: none;
+      border-radius: 0 0 2px 2px;
+    }
+
+    #svgcanvas {
+      border-radius: 2px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    }
+
+    #rulers > div,
+    #ruler_x,
+    #ruler_y,
+    #ruler_corner {
+      background: #2a2824 !important;
+      color: var(--ruler-color);
+    }
+
+    #cur_context_panel {
+      background: rgba(28, 27, 24, 0.92);
+      color: var(--figra-ink-soft);
+      border-radius: 0 0 8px 0;
+      font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+      font-size: 11px;
+    }
+
+    #zoom {
+      color: var(--text-color);
+      background: var(--figra-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      min-height: 28px;
+      padding: 2px 8px;
+      font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+      font-size: 12px;
+    }
+
+    .tool_sep {
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      margin: 8px 4px;
+      height: 24px;
+    }
+
+    /* Selected tool chip (legacy list items) uses Figra accent. */
+    ul li.current {
+      background-color: var(--figra-accent);
+      border-radius: 6px;
+    }
+
+    #sidepanel_handle {
+      color: var(--figra-ink-soft);
+      letter-spacing: 0.12em;
+    }
+
+    #sidepanels {
+      background: rgba(0, 0, 0, 0.14);
+      border-left: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    #layersLabel,
+    #title_panel > p {
+      color: var(--figra-ink-soft);
+      font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    #layerlist {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    #layerlist tr.layersel {
+      background: #f5ebe5;
+      border-color: #e8d5cb;
+    }
+
+    #layerlist td.layername:hover {
+      color: var(--figra-accent-strong);
+    }
+
+    .dropdown button {
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--figra-surface);
+    }
+
+    .dropdown button.down {
+      background: var(--figra-surface-2);
+      border-color: #5a564d;
+    }
+
+    .dropdown li {
+      background: #f7f5ef;
+      border-color: #d6d3c8;
+      color: #2b2a27;
+    }
+
+    .dropdown li:hover,
+    .dropdown li.special:hover {
+      background: #f5ebe5;
+    }
+
+    #palette {
+      margin-right: 8px;
+      gap: 6px;
+    }
+
+    /* Soften scrollbars on tool rails. */
+    #tools_left::-webkit-scrollbar-thumb,
+    #tools_bottom::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+    }
+
+    /* Menus / flyouts that still use light surfaces. */
+    .overlay {
+      background-color: rgba(20, 20, 19, 0.55);
+    }
+  </style>
+  <script type="module" src="./browser-not-supported.js"></script>
+  <title>SVG-edit (IIFE)</title>
+</head>
+
+<body>
+  <div id="container"></div>
+</body>
+<script src="./iife-Editor.js"></script>
+<script>
+  // The storage extension reads its consent from the top-level URL, which FigOne owns.
+  // Record the choice here so the standalone consent dialog never opens in the embed.
+  // Combined with noStorageOnLoad this keeps stored prefs and content out of the editor.
+  function reportEmbedError(error) {
+    const message = error?.message || String(error || "unknown error")
+    console.error("FigOne SVG-Edit embed failed:", message)
+    try {
+      window.parent.postMessage({
+        type: "figone-svg-editor-error",
+        message
+      }, window.location.origin)
+      window.parent.postMessage({
+        type: "figra-svg-editor-error",
+        message
+      }, window.location.origin)
+    } catch (_err) {
+      // Parent may be unavailable during teardown.
+    }
+  }
+
+  function reportEmbedReady() {
+    try {
+      window.parent.postMessage({ type: "figone-svg-editor-ready" }, window.location.origin)
+      window.parent.postMessage({ type: "figra-svg-editor-ready" }, window.location.origin)
+    } catch (_err) {
+      // Parent may be unavailable during teardown.
+    }
+  }
+
+  try {
+    if (!/(?:^|;\s*)svgeditstore=/.test(document.cookie)) {
+      document.cookie = "svgeditstore=prefsOnly; path=/; max-age=31536000; samesite=lax"
+    }
+
+    const EditorCtor = (window.Editor && window.Editor.default) || window.Editor
+    if (typeof EditorCtor !== "function") {
+      throw new Error("iife-Editor.js did not expose window.Editor")
+    }
+
+    const svgEditor = new EditorCtor(document.getElementById("container"))
+    // Host canvas polls contentWindow.svgEditor; keep the reference explicit.
+    window.svgEditor = svgEditor
+    svgEditor.setConfig({
+      allowInitialUserOverride: true,
+      // Embedded WebView path: skip default extensions (storage/opensave dialogs,
+      // extra network loads) so init stays reliable and fast.
+      extensions: [],
+      noDefaultExtensions: true,
+      userExtensions: [],
+      storagePrompt: false,
+      noStorageOnLoad: true
+    })
+    Promise.resolve(svgEditor.init())
+      .then(() => {
+        window.svgEditor = svgEditor
+        reportEmbedReady()
+      })
+      .catch(reportEmbedError)
+  } catch (error) {
+    reportEmbedError(error)
+  }
+</script>
+
+</html>

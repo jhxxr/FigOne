@@ -1,0 +1,3 @@
+Bundled BiRefNet architecture files for briaai/RMBG-2.0 local loading.
+User only needs to import model.safetensors (weights). FigOne merges them into models/RMBG-2.0/.
+Architecture sources match ZhengPeng7/BiRefNet public layout used by RMBG-2.0.

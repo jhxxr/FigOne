@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · 模型渠道与提供商</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="models">
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/favicon.svg" alt="FigOne logo" />
+            <span>FigOne</span>
+          </a>
+          <div class="subtitle" id="modelsPageSubtitle">多模态模型渠道、API 密钥与本地加速权重管理</div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost topbar-link" href="/">方法工作流</a>
+          <a class="dark-action" href="/import.html">导入已有图片</a>
+          <a class="ghost topbar-link history-action" href="/history.html">历史图片</a>
+          <div class="lang-switch" data-lang-switch>
+            <button type="button" class="lang-chip" data-lang="zh">中文</button>
+            <button type="button" class="lang-chip" data-lang="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="models-layout">
+        <!-- Hero Section -->
+        <section class="model-hero">
+          <div class="eyebrow">FIGONE CHANNELS & HARDWARE</div>
+          <h1>模型渠道与推理配置</h1>
+          <p>一次配置，之后所有工作流直接调用。支持混合云端与本地异构管线，按需联动或独立分派生图与重建渠道。</p>
+        </section>
+
+        <!-- Section 1: Provider Channels Configuration -->
+        <section class="card provider-manager-card is-primary-section">
+          <div class="hub-section-header">
+            <div>
+              <div class="eyebrow">PRIMARY · API CHANNELS</div>
+              <h2 class="hub-section-title">API 渠道与绑定模型</h2>
+              <p class="hub-section-copy">这是主配置区：保存后会自动用于“方法工作流”和“导入已有图片”，无需每次手动填写 Key。</p>
+            </div>
+            <button id="newProviderProfileBtn" type="button" class="primary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>添加渠道配置</span>
+            </button>
+          </div>
+
+          <!-- Empty State -->
+          <div id="providerProfileEmpty" class="provider-empty">
+            <div class="provider-empty-icon">+</div>
+            <strong>还没有已保存的渠道配置</strong>
+            <span>点击上方「添加渠道配置」，绑定你的第一个推理或生图 API 密钥。</span>
+          </div>
+
+          <!-- Active Profile Cards List -->
+          <div id="providerProfileList" class="provider-profile-list" hidden></div>
+
+          <!-- Provider Profile Editor Form -->
+          <form id="providerProfileForm" class="provider-profile-form" hidden>
+            <input id="profileId" type="hidden" />
+            <div class="provider-form-header">
+              <div>
+                <div class="eyebrow">CHANNEL CONFIGURATION</div>
+                <h3 id="providerFormTitle">添加提供商渠道</h3>
+              </div>
+              <button id="cancelProviderProfileBtn" type="button" class="ghost">取消</button>
+            </div>
+
+            <!-- Visual Provider Channel Selector Chips -->
+            <div>
+              <label class="field-label">选择提供商类型</label>
+              <div class="provider-channel-chips" id="providerChannelChips">
+                <button type="button" class="channel-chip is-active" data-provider-val="bianxie">
+                  <div class="channel-chip-icon">⚡</div>
+                  <div class="channel-chip-title">便携AI</div>
+                  <div class="channel-chip-meta">一站式聚合网关</div>
+                </button>
+                <button type="button" class="channel-chip" data-provider-val="openai_response">
+                  <div class="channel-chip-icon">🪐</div>
+                  <div class="channel-chip-title">OpenAI</div>
+                  <div class="channel-chip-meta">Responses & Images</div>
+                </button>
+                <button type="button" class="channel-chip" data-provider-val="gemini">
+                  <div class="channel-chip-icon">✨</div>
+                  <div class="channel-chip-title">Gemini</div>
+                  <div class="channel-chip-meta">Google AI Studio</div>
+                </button>
+                <button type="button" class="channel-chip" data-provider-val="openrouter">
+                  <div class="channel-chip-icon">🌐</div>
+                  <div class="channel-chip-title">OpenRouter</div>
+                  <div class="channel-chip-meta">多模型统一中转</div>
+                </button>
+                <button type="button" class="channel-chip" data-provider-val="custom">
+                  <div class="channel-chip-icon">⚙️</div>
+                  <div class="channel-chip-title">自定义中转</div>
+                  <div class="channel-chip-meta">OpenAI 兼容接口</div>
+                </button>
+              </div>
+              <!-- Hidden select synced with chips -->
+              <select id="profileProvider" class="input" style="display:none;">
+                <option value="bianxie" selected>便携AI</option>
+                <option value="openai_response">OpenAI Responses</option>
+                <option value="gemini">Gemini</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="custom">自定义 OpenAI 兼容</option>
+              </select>
+            </div>
+
+            <div class="field-row">
+              <div>
+                <label class="field-label" for="profileName">配置名称</label>
+                <input id="profileName" class="input" type="text" placeholder="例如：OpenAI 主账号 / Gemini 官方" required />
+              </div>
+              <div>
+                <label class="field-label" for="profileSvgModel">SVG / 多模态推理模型</label>
+                <input id="profileSvgModel" class="input" type="text" placeholder="gemini-3.1-pro-preview" required />
+                <div class="model-presets-row" id="svgModelPresets">
+                  <span class="model-presets-label">推荐:</span>
+                  <button type="button" class="preset-chip" data-model="gemini-3.1-pro-preview">gemini-3.1-pro</button>
+                  <button type="button" class="preset-chip" data-model="gpt-5.5">gpt-5.5</button>
+                  <button type="button" class="preset-chip" data-model="claude-3-7-sonnet">claude-3.7-sonnet</button>
+                  <button type="button" class="preset-chip" data-model="google/gemini-3.1-pro-preview">openrouter/gemini</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div>
+                <label class="field-label" for="profileImageProvider">步骤一：图片生成渠道</label>
+                <select id="profileImageProvider" class="input">
+                  <option value="same">跟随主提供商 (推荐)</option>
+                  <option value="openai">OpenAI Images</option>
+                  <option value="bianxie">便携AI</option>
+                  <option value="gemini">Gemini Flash Image</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="custom">自定义图片中转</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label" for="profileImageModel">步骤一：图片模型</label>
+                <input id="profileImageModel" class="input" type="text" placeholder="gpt-image-2" />
+                <div class="model-presets-row" id="imageModelPresets">
+                  <span class="model-presets-label">推荐:</span>
+                  <button type="button" class="preset-chip" data-img-model="gpt-image-2">gpt-image-2</button>
+                  <button type="button" class="preset-chip" data-img-model="gemini-3.1-flash-image-preview">gemini-flash-image</button>
+                  <button type="button" class="preset-chip" data-img-model="dall-e-3">dall-e-3</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div id="profileBaseUrlGroup" hidden>
+                <label class="field-label" for="profileBaseUrl">API Base URL (主渠道)</label>
+                <input id="profileBaseUrl" class="input" type="url" placeholder="https://api.your-provider.com/v1" />
+                <div class="hint">请填写包含 /v1 的 OpenAI 兼容接口前缀。</div>
+              </div>
+              <div id="profileImageBaseUrlGroup" hidden>
+                <label class="field-label" for="profileImageBaseUrl">图片 API Base URL</label>
+                <input id="profileImageBaseUrl" class="input" type="url" placeholder="https://api.your-provider.com/v1" />
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div>
+                <label class="field-label" for="profileApiKey">主渠道 API Key</label>
+                <div class="input-password-wrapper">
+                  <input id="profileApiKey" class="input" type="password" autocomplete="off" placeholder="已保存时可留空保持不变" />
+                  <button type="button" class="input-password-toggle" data-toggle-target="profileApiKey" aria-label="显示/隐藏 API Key">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+                <div id="profileApiKeyHint" class="hint">🔒 将使用 Windows DPAPI 本地加密存储，安全不上传。</div>
+              </div>
+              <div id="profileImageApiGroup" hidden>
+                <label class="field-label" for="profileImageApiKey">图片独立 API Key</label>
+                <div class="input-password-wrapper">
+                  <input id="profileImageApiKey" class="input" type="password" autocomplete="off" placeholder="默认复用主 Key；可独立填写" />
+                  <button type="button" class="input-password-toggle" data-toggle-target="profileImageApiKey" aria-label="显示/隐藏 API Key">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <label class="profile-active-option">
+              <input id="profileMakeActive" type="checkbox" checked />
+              <span>保存后立即设为全局工作流默认渠道</span>
+            </label>
+
+            <div class="provider-form-actions">
+              <button id="saveProviderProfileBtn" type="submit" class="primary">保存渠道配置</button>
+              <div id="providerProfileError" class="error" role="alert"></div>
+            </div>
+          </form>
+        </section>
+
+        <!-- Section 2: Local Hardware Acceleration Models -->
+        <section class="card models-local-card is-secondary-section">
+          <div class="hub-section-header">
+            <div>
+              <div class="eyebrow">SECONDARY · LOCAL HARDWARE</div>
+              <h2 class="hub-section-title">本地模型与加速权重</h2>
+              <p class="hub-section-copy">次要配置：由本地 CPU/GPU 直接运行，保护隐私且无需支付 API 费用。</p>
+            </div>
+          </div>
+
+          <div class="local-models-grid">
+            <!-- SAM3 Local Card -->
+            <article class="model-status-card">
+              <div class="field-header">
+                <div>
+                  <div class="eyebrow">SEGMENTATION · LOCAL</div>
+                  <h3 class="model-title">SAM3 图标分割</h3>
+                </div>
+                <span id="modelStatusBadge" class="status-badge">正在检查</span>
+              </div>
+              <p id="modelStatusCopy" class="model-copy">用于在生成图上检测学术图标并定位矢量化区域。</p>
+
+              <dl id="modelDetails" class="model-details" hidden>
+                <div><dt>权重文件</dt><dd id="modelFileName">—</dd></div>
+                <div><dt>文件大小</dt><dd id="modelFileSize">—</dd></div>
+                <div><dt>SHA-256 校验</dt><dd id="modelHash" class="hash-value">—</dd></div>
+                <div><dt>导入时间</dt><dd id="modelImportedAt">—</dd></div>
+                <div><dt>推理后端</dt><dd id="modelRuntime">CPU Float32</dd></div>
+              </dl>
+
+              <div id="modelProgressArea" class="model-progress-area" hidden>
+                <div class="progress-label">
+                  <span id="modelProgressLabel">正在导入…</span>
+                  <span id="modelProgressText">0%</span>
+                </div>
+                <div class="progress-track"><div id="modelProgressBar" class="progress-bar"></div></div>
+              </div>
+
+              <div class="model-actions">
+                <button id="importModelBtn" class="primary" type="button">导入 sam3.pt 权重</button>
+                <button id="removeModelBtn" class="ghost danger-action" type="button" hidden>移除模型</button>
+              </div>
+              <div id="modelError" class="error" role="alert"></div>
+
+              <details class="model-disclosure">
+                <summary>导入说明与硬件要求</summary>
+                <div class="model-disclosure-body">
+                  <p>SAM3 权重约为 3.3 GB。导入后 FigOne 会将其复制到应用沙盒中，原文件不受影响。本版本采用 CPU Float32 优化，不强制要求独立显卡。</p>
+                </div>
+              </details>
+            </article>
+
+            <!-- RMBG-2.0 Local Card -->
+            <article class="model-status-card">
+              <div class="field-header">
+                <div>
+                  <div class="eyebrow">BACKGROUND REMOVAL · LOCAL</div>
+                  <h3 class="model-title">RMBG-2.0 抠图权重</h3>
+                </div>
+                <span id="rmbgStatusBadge" class="status-badge">正在检查</span>
+              </div>
+              <p id="rmbgStatusCopy" class="model-copy">
+                步骤三图标透明化使用 <code>briaai/RMBG-2.0</code>。网络架构已内置，仅需导入权重。
+              </p>
+
+              <ol class="hint" style="margin: 0 0 12px 18px; padding: 0; line-height: 1.6;">
+                <li>打开 <a href="https://huggingface.co/briaai/RMBG-2.0" target="_blank" rel="noreferrer">HuggingFace RMBG-2.0</a></li>
+                <li>下载 <strong>model.safetensors</strong>（约 885 MB）</li>
+                <li>点击下方按钮导入即可完成加速配置</li>
+              </ol>
+
+              <dl id="rmbgDetails" class="model-details" hidden>
+                <div><dt>权重文件</dt><dd id="rmbgFileName">—</dd></div>
+                <div><dt>文件大小</dt><dd id="rmbgFileSize">—</dd></div>
+                <div><dt>SHA-256 校验</dt><dd id="rmbgHash" class="hash-value">—</dd></div>
+                <div><dt>导入时间</dt><dd id="rmbgImportedAt">—</dd></div>
+              </dl>
+
+              <div id="rmbgProgressArea" class="model-progress-area" hidden>
+                <div class="progress-label">
+                  <span id="rmbgProgressLabel">正在导入…</span>
+                  <span id="rmbgProgressText">0%</span>
+                </div>
+                <div class="progress-track"><div id="rmbgProgressBar" class="progress-bar"></div></div>
+              </div>
+
+              <div class="model-actions">
+                <button id="importRmbgBtn" class="primary" type="button">导入 model.safetensors</button>
+                <button id="removeRmbgBtn" class="ghost danger-action" type="button" hidden>移除权重</button>
+              </div>
+              <div id="rmbgError" class="error" role="alert"></div>
+
+              <details class="model-disclosure">
+                <summary>导入说明</summary>
+                <div class="model-disclosure-body">
+                  <p>导入完成后请退出并重启应用，以便本地推理引擎重新加载权重路径。</p>
+                </div>
+              </details>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Local FigOne shell only. App commands are unrestricted because no app ACL manifest is defined and the UI loads from the local app origin.",
+  "local": true,
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}
