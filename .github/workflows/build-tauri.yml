@@ -50,9 +50,15 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force "engine/python" | Out-Null
           New-Item -ItemType File -Force "engine/python/python.exe" | Out-Null
+          New-Item -ItemType File -Force "engine/python-runtime-cpu.zip" | Out-Null
+          '{"formatVersion":1,"runtime":"windows-x64-cpu","fingerprint":"check-only"}' |
+            Set-Content -Path "engine/python-runtime-cpu.manifest.json" -Encoding utf8
 
       - name: Check Tauri application
         run: cargo check --locked
+
+      - name: Test CPU runtime helpers
+        run: cargo test --locked
 
   build-installer:
     name: Build Windows x64 installer
@@ -87,6 +93,8 @@ jobs:
         shell: pwsh
         working-directory: .
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           $runtime = "engine/python"
           if (Test-Path $runtime) {
             Remove-Item $runtime -Recurse -Force
@@ -105,19 +113,38 @@ jobs:
           if (Test-Path $externallyManaged) {
             Remove-Item $externallyManaged -Force
           }
+
+          # uv-managed CPython is usually pip-ready; bootstrap ensurepip if a clean
+          # install ever ships without it so the rest of the job fails clearly.
+          & "$runtime/python.exe" -c "import ensurepip, sys; ensurepip.bootstrap(upgrade=True); print('ensurepip ready:', sys.executable)"
           & "$runtime/python.exe" -m pip install --break-system-packages --upgrade pip wheel "setuptools<81"
           & "$runtime/python.exe" -m pip install --break-system-packages `
             --extra-index-url https://download.pytorch.org/whl/cpu `
             torch==2.7.1+cpu torchvision==0.22.1+cpu
           & "$runtime/python.exe" -m pip install --break-system-packages -r engine/requirements-runtime.txt
           & "$runtime/python.exe" -m pip install --break-system-packages --no-deps engine/sam3-src
-          & "$runtime/python.exe" -c "import fastapi, torch, torchvision, transformers, einops, kornia, timm; print(torch.__version__); print('kornia', kornia.__version__)"
-          & "$runtime/python.exe" -c "import importlib.util; assert importlib.util.find_spec('sam3')"
-          & "$runtime/python.exe" -c "import sam3.model_builder; print('SAM3 image model import passed')"
+          & "$runtime/python.exe" -c "import fastapi, torch, torchvision, transformers, einops, kornia, timm; assert torch.__version__.startswith('2.7.1') and '+cpu' in torch.__version__; assert torchvision.__version__.startswith('0.22.1') and '+cpu' in torchvision.__version__; assert not torch.cuda.is_available(); print('CPU core imports passed:', torch.__version__, torchvision.__version__)"
+          & "$runtime/python.exe" -c "import torch; from torchvision.ops import roi_align; x=torch.randn(1,1,4,4); boxes=torch.tensor([[0,0,0,3,3]], dtype=torch.float32); y=roi_align(x, boxes, output_size=(2,2)); assert tuple(y.shape) == (1,1,2,2); print('TorchVision CPU operator passed')"
+          & "$runtime/python.exe" -c "from pathlib import Path; import sam3; import sam3.model_builder; package=Path(sam3.__file__).resolve().parent; asset=package/'assets'/'bpe_simple_vocab_16e6.txt.gz'; assert asset.is_file(), asset; print('SAM3 package and BPE asset passed:', asset)"
 
-          Remove-Item "engine/.python-build" -Recurse -Force
-          Get-ChildItem $runtime -Directory -Recurse -Filter __pycache__ |
-            Remove-Item -Recurse -Force
+          & "$PWD/scripts/prune_cpu_runtime.ps1" -Runtime $runtime
+          & "$runtime/python.exe" -c "import sys; sys.path.insert(0, 'engine'); import server; capabilities=server._sam3_capabilities(); assert capabilities['supportsLocalCpu'], capabilities; assert server._resolve_svg_edit_path()[0]; print('FigOne CPU engine smoke test passed')"
+          & "$runtime/python.exe" scripts/package_cpu_runtime.py --runtime $runtime --output engine/python-runtime-cpu.zip
+
+          $runtimeFiles = Get-ChildItem $runtime -Recurse -File
+          $runtimeBytes = ($runtimeFiles | Measure-Object -Property Length -Sum).Sum
+          $archive = Get-Item "engine/python-runtime-cpu.zip"
+          Write-Host ("CPU runtime inventory: {0} files, {1} bytes; archive {2} bytes" -f $runtimeFiles.Count, $runtimeBytes, $archive.Length)
+          "### CPU runtime`n- Files: $($runtimeFiles.Count)`n- Uncompressed bytes: $runtimeBytes`n- Archive bytes: $($archive.Length)" |
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+          # Drop the expanded runtime after packaging so the NSIS bundle only ships the ZIP.
+          if (Test-Path $runtime) {
+            Remove-Item $runtime -Recurse -Force
+          }
+          if (Test-Path "engine/.python-build") {
+            Remove-Item "engine/.python-build" -Recurse -Force
+          }
 
       - name: Verify packaged runtime
         shell: pwsh
@@ -126,7 +153,6 @@ jobs:
           $requiredFiles = @(
             "engine/server.py",
             "engine/autofigure2.py",
-            "engine/requirements-runtime.txt",
             "engine/web/index.html",
             "engine/web/import.html",
             "engine/web/canvas.html",
@@ -134,7 +160,11 @@ jobs:
             "engine/web/app.js",
             "engine/web/styles.css",
             "engine/web/vendor/svg-edit/editor/index.html",
-            "engine/python/python.exe"
+            "engine/rmbg2-src/config.json",
+            "engine/rmbg2-src/birefnet.py",
+            "engine/rmbg2-src/BiRefNet_config.py",
+            "engine/python-runtime-cpu.zip",
+            "engine/python-runtime-cpu.manifest.json"
           )
 
           $missingFiles = $requiredFiles | Where-Object { -not (Test-Path $_ -PathType Leaf) }
@@ -142,7 +172,15 @@ jobs:
             $missingFiles | ForEach-Object {
               Write-Output "::error file=$_::Required installer resource is missing: $_"
             }
-            throw "The embedded CPU Python runtime is incomplete. Refusing to create an installer that cannot start the FigOne engine."
+            throw "The CPU runtime or engine resources are incomplete. Refusing to create an installer that cannot start FigOne."
+          }
+
+          $manifest = Get-Content "engine/python-runtime-cpu.manifest.json" -Raw | ConvertFrom-Json
+          if ($manifest.runtime -ne "windows-x64-cpu" -or [string]::IsNullOrWhiteSpace($manifest.sha256)) {
+            throw "The generated CPU runtime manifest is invalid."
+          }
+          if ((Get-Item "engine/python-runtime-cpu.zip").Length -le 0) {
+            throw "The generated CPU runtime archive is empty."
           }
 
       - name: Install Tauri CLI

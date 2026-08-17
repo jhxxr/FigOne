@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.22"
+version = "0.1.23"
 description = "FigOne Desktop App"
 authors = ["you"]
 license = ""
@@ -26,6 +26,7 @@ tauri-plugin-log = "2"
 rfd = "0.15"
 sha2 = "0.10"
 base64 = "0.22"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

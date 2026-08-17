@@ -11,6 +11,8 @@ engine/outputs/
 engine/hf_cache/
 # Local/dev Python stubs — never commit empty or machine-specific runtimes
 engine/python/
+engine/python-runtime-cpu.zip
+engine/python-runtime-cpu.manifest.json
 
 # Embedded development repository metadata and unused upstream files
 engine/sam3-src/.git/

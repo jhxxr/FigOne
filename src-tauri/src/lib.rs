@@ -1,7 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
@@ -12,6 +12,7 @@ use rfd::{AsyncFileDialog, MessageButtons, MessageDialog, MessageLevel};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use zip::ZipArchive;
 
 #[cfg(target_os = "windows")]
 use std::ptr::null_mut;
@@ -19,8 +20,8 @@ use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
 };
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Threading::OpenProcess;
@@ -39,6 +40,19 @@ const RMBG_WEIGHT_FILENAME: &str = "model.safetensors";
 const RMBG_METADATA_FILENAME: &str = "rmbg2.json";
 const RMBG_BUNDLE_DIRNAME: &str = "rmbg2-src";
 const RMBG_REQUIRED_SIDECARS: &[&str] = &["config.json", "birefnet.py", "BiRefNet_config.py"];
+const CPU_RUNTIME_ARCHIVE_FILENAME: &str = "python-runtime-cpu.zip";
+const CPU_RUNTIME_MANIFEST_FILENAME: &str = "python-runtime-cpu.manifest.json";
+const CPU_RUNTIME_CACHE_DIRNAME: &str = "python-cpu";
+const CPU_RUNTIME_COMPLETE_MARKER: &str = ".complete";
+const CPU_RUNTIME_REQUIRED_FILES: &[&str] = &[
+    "python.exe",
+    "Lib/site-packages/torch/__init__.py",
+    "Lib/site-packages/torchvision/__init__.py",
+    "Lib/site-packages/transformers/__init__.py",
+    "Lib/site-packages/sam3/model_builder.py",
+    "Lib/site-packages/sam3/assets/bpe_simple_vocab_16e6.txt.gz",
+];
+const MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 struct EngineProcess(Mutex<Option<Child>>);
 
@@ -129,6 +143,13 @@ struct ModelMetadata {
     size_bytes: u64,
     sha256: String,
     imported_at: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CpuRuntimeManifest {
+    fingerprint: Option<String>,
+    sha256: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -628,24 +649,234 @@ fn build_model_status(app: &AppHandle) -> Result<ModelStatus, String> {
     })
 }
 
-fn start_engine(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> {
-    let dir = engine_dir(app)?;
-    let python = if is_development() {
-        std::env::var("AUTOFIGURE_PYTHON").unwrap_or_else(|_| "python".to_string())
+fn safe_cpu_runtime_zip_path(name: &str) -> Result<PathBuf, String> {
+    let normalized = name.replace('\\', "/");
+    let mut relative = PathBuf::new();
+    for component in Path::new(&normalized).components() {
+        match component {
+            Component::Normal(value) => relative.push(value),
+            Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(format!(
+                    "CPU runtime archive contains an unsafe path: {name}"
+                ));
+            }
+        }
+    }
+    if relative.as_os_str().is_empty() {
+        return Err("CPU runtime archive contains an empty path".to_string());
+    }
+    Ok(relative)
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|error| format!("无法读取 runtime 压缩包: {error}"))?;
+    let mut digest = Sha256::new();
+    let mut buffer = vec![0_u8; 8 * 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("无法校验 runtime 压缩包: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+fn valid_runtime_fingerprint(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn read_cpu_runtime_manifest(path: &Path) -> Option<CpuRuntimeManifest> {
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn cpu_runtime_cache_key(
+    archive: &Path,
+    manifest: Option<&CpuRuntimeManifest>,
+) -> Result<String, String> {
+    if let Some(manifest) = manifest {
+        let fingerprint = manifest
+            .fingerprint
+            .as_deref()
+            .or(manifest.sha256.as_deref())
+            .unwrap_or_default();
+        if valid_runtime_fingerprint(fingerprint) {
+            return Ok(fingerprint.to_string());
+        }
+    }
+
+    let metadata = fs::metadata(archive)
+        .map_err(|error| format!("无法读取 CPU runtime 压缩包信息: {error}"))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    Ok(format!("archive-{}-{modified}", metadata.len()))
+}
+
+fn cpu_runtime_is_complete(root: &Path, fingerprint: &str) -> bool {
+    if !root.join(CPU_RUNTIME_COMPLETE_MARKER).is_file() {
+        return false;
+    }
+    let marker = fs::read_to_string(root.join(CPU_RUNTIME_COMPLETE_MARKER)).ok();
+    if marker.as_deref().map(str::trim) != Some(fingerprint) {
+        return false;
+    }
+    CPU_RUNTIME_REQUIRED_FILES
+        .iter()
+        .all(|relative| root.join(relative).is_file())
+}
+
+fn validate_cpu_runtime(root: &Path) -> Result<(), String> {
+    let missing: Vec<&str> = CPU_RUNTIME_REQUIRED_FILES
+        .iter()
+        .copied()
+        .filter(|relative| !root.join(relative).is_file())
+        .collect();
+    if missing.is_empty() {
+        Ok(())
     } else {
-        app.path()
-            .resource_dir()
-            .map_err(|error| format!("无法定位内置 Python: {error}"))?
-            .join("engine")
-            .join("python")
-            .join("python.exe")
-            .display()
-            .to_string()
-    };
+        Err(format!(
+            "CPU runtime 解压后缺少必要文件: {}",
+            missing.join(", ")
+        ))
+    }
+}
+
+fn extract_cpu_runtime_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+    let file = File::open(archive_path)
+        .map_err(|error| format!("无法打开 CPU runtime 压缩包: {error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("CPU runtime 压缩包损坏: {error}"))?;
+    let mut uncompressed_bytes = 0_u64;
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| format!("无法读取 CPU runtime 压缩包条目: {error}"))?;
+        let name = entry.name().to_string();
+        let relative = safe_cpu_runtime_zip_path(&name)?;
+        let target = destination.join(relative);
+        if entry.is_dir() {
+            fs::create_dir_all(&target)
+                .map_err(|error| format!("无法创建 runtime 目录 {target:?}: {error}"))?;
+            continue;
+        }
+
+        uncompressed_bytes = uncompressed_bytes
+            .checked_add(entry.size())
+            .ok_or_else(|| "CPU runtime 压缩包大小溢出".to_string())?;
+        if uncompressed_bytes > MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES {
+            return Err("CPU runtime 压缩包解压内容超过安全上限".to_string());
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("无法创建 runtime 目录 {parent:?}: {error}"))?;
+        }
+        let mut output = File::create(&target)
+            .map_err(|error| format!("无法写入 runtime 文件 {target:?}: {error}"))?;
+        std::io::copy(&mut entry, &mut output)
+            .map_err(|error| format!("无法解压 runtime 文件 {target:?}: {error}"))?;
+    }
+
+    Ok(())
+}
+
+fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    let resource_engine = app
+        .path()
+        .resource_dir()
+        .map_err(|error| format!("无法定位 FigOne 资源目录: {error}"))?
+        .join("engine");
+    let archive_path = resource_engine.join(CPU_RUNTIME_ARCHIVE_FILENAME);
+
+    // Keep a directory fallback for local/legacy installations. Official CPU bundles use the ZIP.
+    if !archive_path.is_file() {
+        let legacy = resource_engine.join("python");
+        if legacy.join("python.exe").is_file() {
+            return Ok(legacy);
+        }
+        return Err(format!(
+            "内置 CPU Python runtime 缺失: {}",
+            archive_path.display()
+        ));
+    }
+
+    let manifest = read_cpu_runtime_manifest(&resource_engine.join(CPU_RUNTIME_MANIFEST_FILENAME));
+    let fingerprint = cpu_runtime_cache_key(&archive_path, manifest.as_ref())?;
+    let cache_parent = app_data_dir(app)?
+        .join("runtime")
+        .join(CPU_RUNTIME_CACHE_DIRNAME);
+    fs::create_dir_all(&cache_parent)
+        .map_err(|error| format!("无法创建 CPU runtime 缓存目录: {error}"))?;
+    let target = cache_parent.join(&fingerprint);
+    if cpu_runtime_is_complete(&target, &fingerprint) {
+        return Ok(target);
+    }
+
+    // Hashing the large archive is intentionally done only before extraction. Cached
+    // runtimes return above without rereading the archive on every application start.
+    if let Some(expected) = manifest.as_ref().and_then(|value| value.sha256.as_deref()) {
+        if valid_runtime_fingerprint(expected) {
+            let actual = sha256_file(&archive_path)?;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err("CPU runtime 压缩包校验失败，文件可能已损坏".to_string());
+            }
+        }
+    }
+    if target.exists() {
+        fs::remove_dir_all(&target)
+            .map_err(|error| format!("无法清理不完整的 CPU runtime: {error}"))?;
+    }
+
+    let staging = cache_parent.join(format!(".{fingerprint}.{}.staging", std::process::id()));
+    if staging.exists() {
+        fs::remove_dir_all(&staging)
+            .map_err(|error| format!("无法清理 CPU runtime 临时目录: {error}"))?;
+    }
+    fs::create_dir_all(&staging)
+        .map_err(|error| format!("无法创建 CPU runtime 临时目录: {error}"))?;
+
+    if let Err(error) = extract_cpu_runtime_archive(&archive_path, &staging)
+        .and_then(|_| validate_cpu_runtime(&staging))
+        .and_then(|_| {
+            fs::write(staging.join(CPU_RUNTIME_COMPLETE_MARKER), &fingerprint)
+                .map_err(|error| format!("无法写入 CPU runtime 完成标记: {error}"))
+        })
+    {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    if let Err(error) = fs::rename(&staging, &target) {
+        if target.exists() && cpu_runtime_is_complete(&target, &fingerprint) {
+            let _ = fs::remove_dir_all(&staging);
+            return Ok(target);
+        }
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("无法启用 CPU runtime: {error}"));
+    }
+
+    Ok(target)
+}
+
+fn start_engine(app: &AppHandle, port: u16, python: &str) -> Result<(Child, PathBuf), String> {
+    let dir = engine_dir(app)?;
     let runtime_dir = app_data_dir(app)?.join("runtime");
     fs::create_dir_all(&runtime_dir).map_err(|error| format!("无法创建运行目录: {error}"))?;
     let hf_home = hf_home_path(app)?;
-    fs::create_dir_all(&hf_home).map_err(|error| format!("无法创建 HuggingFace 缓存目录: {error}"))?;
+    fs::create_dir_all(&hf_home)
+        .map_err(|error| format!("无法创建 HuggingFace 缓存目录: {error}"))?;
     let log_path = runtime_dir.join("engine-startup.log");
     let mut log_file = OpenOptions::new()
         .create(true)
@@ -661,7 +892,7 @@ fn start_engine(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> 
         .try_clone()
         .map_err(|error| format!("无法准备引擎日志: {error}"))?;
 
-    let mut command = Command::new(&python);
+    let mut command = Command::new(python);
     command
         .arg("server.py")
         .current_dir(&dir)
@@ -669,7 +900,7 @@ fn start_engine(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> 
         .env("FIGRA_HOST", "127.0.0.1")
         .env("FIGONE_PORT", port.to_string())
         .env("FIGRA_PORT", port.to_string())
-        .env("AUTOFIGURE_PYTHON", &python)
+        .env("AUTOFIGURE_PYTHON", python)
         .env("FIGONE_RUNTIME_DIR", &runtime_dir)
         .env("FIGRA_RUNTIME_DIR", &runtime_dir)
         .env("FIGONE_FORCE_CPU", if is_development() { "0" } else { "1" })
@@ -678,16 +909,25 @@ fn start_engine(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> 
         .env("PYTHONUNBUFFERED", "1")
         .env("HF_HOME", &hf_home)
         .env("HUGGINGFACE_HUB_CACHE", hf_home.join("hub"))
-        .env(
-            "PYTHONPATH",
-            format!(
-                "{};{}",
-                dir.join("sam3-src").display(),
-                std::env::var("PYTHONPATH").unwrap_or_default()
-            ),
-        )
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr));
+
+    if is_development() {
+        // Dev builds keep using the local SAM3 source tree. Release builds install
+        // sam3 into the bundled interpreter's site-packages instead.
+        let mut python_path = dir.join("sam3-src").display().to_string();
+        if let Ok(existing) = std::env::var("PYTHONPATH") {
+            if !existing.is_empty() {
+                python_path = format!("{python_path};{existing}");
+            }
+        }
+        command.env("PYTHONPATH", python_path);
+    } else {
+        // The bundled interpreter must use its own stdlib/site-packages, not a stale
+        // developer PYTHONPATH or PYTHONHOME inherited from the desktop process.
+        command.env_remove("PYTHONPATH");
+        command.env_remove("PYTHONHOME");
+    }
 
     if let Some(model_path) = resolved_model_path(app)? {
         command.env("SAM3_CHECKPOINT", model_path);
@@ -749,6 +989,14 @@ fn wait_for_engine(child: &mut Child, port: u16) -> Result<(), String> {
 }
 
 fn launch_engine(app: &AppHandle) -> Result<(Child, u16, PathBuf), String> {
+    let python = if is_development() {
+        std::env::var("AUTOFIGURE_PYTHON").unwrap_or_else(|_| "python".to_string())
+    } else {
+        log::info!("Preparing bundled CPU Python runtime");
+        let root = ensure_cpu_runtime(app)?;
+        log::info!("Bundled CPU Python runtime ready at {}", root.display());
+        root.join("python.exe").display().to_string()
+    };
     let mut last_failure: Option<String> = None;
     let mut last_log_path = app_data_dir(app)?
         .join("runtime")
@@ -760,7 +1008,7 @@ fn launch_engine(app: &AppHandle) -> Result<(Child, u16, PathBuf), String> {
     for attempt in 1..=3 {
         let port = find_free_port();
         log::info!("Starting FigOne Engine attempt {attempt} on port {port}");
-        let (mut child, log_path) = match start_engine(app, port) {
+        let (mut child, log_path) = match start_engine(app, port, &python) {
             Ok(result) => result,
             Err(error) => {
                 log::error!("FigOne Engine attempt {attempt} could not start: {error}");
@@ -1001,14 +1249,13 @@ async fn import_rmbg_weights(app: AppHandle) -> Result<RmbgModelStatus, String> 
         }
         for name in RMBG_REQUIRED_SIDECARS {
             if !bundle.join(name).is_file() {
-                return Err(format!(
-                    "内置 RMBG 配置包缺少 {name}。请重新安装 FigOne。"
-                ));
+                return Err(format!("内置 RMBG 配置包缺少 {name}。请重新安装 FigOne。"));
             }
         }
 
         let target_dir = managed_rmbg_dir(&app)?;
-        fs::create_dir_all(&target_dir).map_err(|error| format!("无法创建 RMBG 模型目录: {error}"))?;
+        fs::create_dir_all(&target_dir)
+            .map_err(|error| format!("无法创建 RMBG 模型目录: {error}"))?;
 
         // Refresh architecture sidecars from the bundled package.
         for name in RMBG_REQUIRED_SIDECARS {
@@ -1016,7 +1263,11 @@ async fn import_rmbg_weights(app: AppHandle) -> Result<RmbgModelStatus, String> 
                 .map_err(|error| format!("无法复制内置文件 {name}: {error}"))?;
         }
         // Optional extras if present in the bundle.
-        for name in ["preprocessor_config.json", "FIGONE_NOTE.txt", "FIGRA_NOTE.txt"] {
+        for name in [
+            "preprocessor_config.json",
+            "FIGONE_NOTE.txt",
+            "FIGRA_NOTE.txt",
+        ] {
             let src = bundle.join(name);
             if src.is_file() {
                 let _ = fs::copy(src, target_dir.join(name));
@@ -1338,4 +1589,53 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running FigOne desktop application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cpu_runtime_zip_paths_are_confined() {
+        assert!(safe_cpu_runtime_zip_path("Lib/site-packages/torch/__init__.py").is_ok());
+        assert!(safe_cpu_runtime_zip_path("./python.exe").is_ok());
+        assert!(safe_cpu_runtime_zip_path("../outside.txt").is_err());
+        assert!(safe_cpu_runtime_zip_path("C:/outside.txt").is_err());
+        assert!(safe_cpu_runtime_zip_path("\\\\server\\share\\outside.txt").is_err());
+    }
+
+    #[test]
+    fn cpu_runtime_archive_extracts_and_validates() {
+        let root =
+            std::env::temp_dir().join(format!("figone-cpu-runtime-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create test directory");
+        let archive_path = root.join("runtime.zip");
+        let destination = root.join("extracted");
+
+        {
+            let file = File::create(&archive_path).expect("create test archive");
+            let mut writer = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            for relative in CPU_RUNTIME_REQUIRED_FILES {
+                writer
+                    .start_file(relative, options)
+                    .expect("create runtime entry");
+                writer.write_all(b"test").expect("write runtime entry");
+            }
+            writer.finish().expect("finish test archive");
+        }
+
+        extract_cpu_runtime_archive(&archive_path, &destination).expect("extract test archive");
+        validate_cpu_runtime(&destination).expect("validate extracted runtime");
+        fs::remove_dir_all(&root).expect("remove test directory");
+    }
+
+    #[test]
+    fn cpu_runtime_fingerprints_are_safe_cache_names() {
+        assert!(valid_runtime_fingerprint("a1b2-c3_d4"));
+        assert!(!valid_runtime_fingerprint("../runtime"));
+        assert!(!valid_runtime_fingerprint(""));
+    }
 }

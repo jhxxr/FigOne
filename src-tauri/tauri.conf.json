@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FigOne",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "identifier": "com.figone.desktop",
   "build": {
     "frontendDist": "../engine/web"
@@ -18,16 +18,17 @@
     "targets": "all",
     "resources": {
       "../engine/autofigure2.py": "engine/autofigure2.py",
-      "../engine/bootstrap_sam3.py": "engine/bootstrap_sam3.py",
-      "../engine/requirements-runtime.txt": "engine/requirements-runtime.txt",
       "../engine/server.py": "engine/server.py",
       "../engine/web": "engine/web",
-      "../engine/sam3-src/LICENSE": "engine/sam3-src/LICENSE",
-      "../engine/sam3-src/MANIFEST.in": "engine/sam3-src/MANIFEST.in",
-      "../engine/sam3-src/pyproject.toml": "engine/sam3-src/pyproject.toml",
-      "../engine/sam3-src/sam3": "engine/sam3-src/sam3",
+      "../engine/sam3-src/LICENSE": "licenses/sam3-LICENSE.txt",
       "../engine/rmbg2-src": "engine/rmbg2-src",
-      "../engine/python": "engine/python"
+      "../engine/python-runtime-cpu.zip": "engine/python-runtime-cpu.zip",
+      "../engine/python-runtime-cpu.manifest.json": "engine/python-runtime-cpu.manifest.json"
+    },
+    "windows": {
+      "nsis": {
+        "compression": "zlib"
+      }
     },
     "icon": [
       "icons/32x32.png",
