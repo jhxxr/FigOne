@@ -160,6 +160,7 @@ jobs:
             "engine/web/import.html",
             "engine/web/canvas.html",
             "engine/web/history.html",
+            "engine/web/startup.html",
             "engine/web/app.js",
             "engine/web/styles.css",
             "engine/web/vendor/svg-edit/editor/index.html",

@@ -3193,11 +3193,32 @@
       if (stageEl) stageEl.textContent = stageLabel;
       if (topbarEl) topbarEl.textContent = `${currentPercentage}% · ${stageLabel}`;
       if (percentEl) percentEl.textContent = `${currentPercentage}%`;
-      if (sideProgressTitle && statusState === "history" && !lastPipelineLabel) {
-        sideProgressTitle.textContent = t("canvas.pipeline.stage_history_ready");
+      // Always refresh the side progress chrome. Leaving the HTML defaults
+      // ("Waiting to start") makes live runs look stuck when init is still
+      // awaiting settings/profile or EventSource has not painted yet.
+      if (sideProgressTitle) {
+        if (lastPipelineLabel) {
+          sideProgressTitle.textContent = lastPipelineLabel;
+        } else if (statusState === "history") {
+          sideProgressTitle.textContent = t("canvas.pipeline.stage_history_ready");
+        } else if (statusState === "disconnected") {
+          sideProgressTitle.textContent = t("canvas.disconnected");
+        } else if (statusState === "failed") {
+          sideProgressTitle.textContent = t("canvas.failed");
+        } else if (statusState === "done") {
+          sideProgressTitle.textContent = t("canvas.pipeline.stage_all_done_short");
+        } else {
+          sideProgressTitle.textContent = t("canvas.pipeline.stage_start");
+        }
       }
-      if (sideLiveLog && statusState === "history" && sideLiveLog.dataset.i18nDefault !== "0") {
-        sideLiveLog.textContent = t("canvas.history_ready");
+      if (sideLiveLog && sideLiveLog.dataset.i18nDefault !== "0") {
+        if (statusState === "history") {
+          sideLiveLog.textContent = t("canvas.history_ready");
+        } else if (statusState === "disconnected") {
+          sideLiveLog.textContent = t("canvas.disconnected");
+        } else {
+          sideLiveLog.textContent = t("canvas.pipeline.waiting_log");
+        }
       }
 
       if (statusState === "waiting") {
@@ -3214,8 +3235,6 @@
         statusText.textContent = t("canvas.history_ready");
       }
     }
-
-    onLocaleChange(setCanvasLocale);
 
     jobIdEl.textContent = jobId;
 
@@ -3236,6 +3255,12 @@
     const artifactLightboxImage = $("artifactLightboxImage");
     const artifactLightboxObject = $("artifactLightboxObject");
     const artifactLightboxOpen = $("artifactLightboxOpen");
+
+    // Register this only after the side-panel elements above are initialized.
+    // onLocaleChange invokes listeners immediately; registering earlier would
+    // hit the const temporal dead zone and abort canvas initialization before
+    // the timer/EventSource are started.
+    onLocaleChange(setCanvasLocale);
 
     function setSidePanelTab(tabName) {
       const next = tabName || "progress";
@@ -3709,57 +3734,15 @@
     };
 
     const artifacts = new Set();
+    const isHistorySource = source === "history";
     // Apply locale to pipeline chrome before first progress paint.
-    if (source === "history") {
+    if (isHistorySource) {
       lastPipelineLabel = t("canvas.pipeline.stage_history_ready");
       if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+    } else {
+      lastPipelineLabel = t("canvas.pipeline.stage_start");
     }
     setCanvasLocale();
-
-    // Prefill last-used multimodal scale / SVG model from job settings when available.
-    try {
-      const settingsRes = await engineFetch(`/api/history/${encodeURIComponent(jobId)}`);
-      if (settingsRes.ok) {
-        const item = await settingsRes.json();
-        if (item?.settings?.multimodal_image_scale != null) {
-          preferredMultimodalScale = normalizeMultimodalImageScale(
-            item.settings.multimodal_image_scale
-          );
-          if (canvasMultimodalImageScale) {
-            canvasMultimodalImageScale.value = preferredMultimodalScale;
-          }
-        }
-        if (item?.settings?.svg_model) {
-          preferredSvgModel = String(item.settings.svg_model).trim();
-          if (canvasSvgModel && preferredSvgModel) {
-            canvasSvgModel.value = preferredSvgModel;
-          }
-        }
-      }
-    } catch (_err) {
-      // Ignore; defaults remain available.
-    }
-
-    // Fall back to active provider profile SVG model when job has none saved.
-    if (!preferredSvgModel) {
-      try {
-        const profile = await getActiveProviderProfile();
-        const provider = profile?.provider || "bianxie";
-        preferredSvgModel =
-          (profile?.svgModel && String(profile.svgModel).trim()) ||
-          getDefaultSvgModelForProvider(provider);
-        if (canvasSvgModel && preferredSvgModel) {
-          canvasSvgModel.value = preferredSvgModel;
-          canvasSvgModel.placeholder = preferredSvgModel;
-        }
-      } catch (_err) {
-        preferredSvgModel = getDefaultSvgModelForProvider("bianxie");
-        if (canvasSvgModel) {
-          canvasSvgModel.value = preferredSvgModel;
-          canvasSvgModel.placeholder = preferredSvgModel;
-        }
-      }
-    }
 
     // Wire controls before the history early-return so reopen-from-history
     // still gets regenerate / scale / model listeners.
@@ -3789,19 +3772,85 @@
       canvasSvgModel.addEventListener("input", rememberSvgModel);
     }
 
-    if (source === "history") {
+    // Settings/profile prefill must not block live EventSource attachment.
+    // Fresh jobs only have run.log, and a slow /api/history call previously left
+    // the side panel stuck on the HTML default "Waiting to start".
+    const prefillJobSettings = async () => {
+      try {
+        const settingsRes = await engineFetch(`/api/history/${encodeURIComponent(jobId)}`);
+        if (settingsRes.ok) {
+          const item = await settingsRes.json();
+          if (item?.settings?.multimodal_image_scale != null) {
+            preferredMultimodalScale = normalizeMultimodalImageScale(
+              item.settings.multimodal_image_scale
+            );
+            if (canvasMultimodalImageScale) {
+              canvasMultimodalImageScale.value = preferredMultimodalScale;
+            }
+          }
+          if (item?.settings?.svg_model) {
+            preferredSvgModel = String(item.settings.svg_model).trim();
+            if (canvasSvgModel && preferredSvgModel) {
+              canvasSvgModel.value = preferredSvgModel;
+            }
+          }
+        }
+      } catch (_err) {
+        // Ignore; defaults remain available.
+      }
+
+      if (!preferredSvgModel) {
+        try {
+          const profile = await getActiveProviderProfile();
+          const provider = profile?.provider || "bianxie";
+          preferredSvgModel =
+            (profile?.svgModel && String(profile.svgModel).trim()) ||
+            getDefaultSvgModelForProvider(provider);
+          if (canvasSvgModel && preferredSvgModel) {
+            canvasSvgModel.value = preferredSvgModel;
+            canvasSvgModel.placeholder = preferredSvgModel;
+          }
+        } catch (_err) {
+          preferredSvgModel = getDefaultSvgModelForProvider("bianxie");
+          if (canvasSvgModel) {
+            canvasSvgModel.value = preferredSvgModel;
+            canvasSvgModel.placeholder = preferredSvgModel;
+          }
+        }
+      }
+      updateSvgRerunControls();
+    };
+
+    if (isHistorySource) {
       if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+      await prefillJobSettings();
       await loadHistoricalJob(false);
       return;
     }
 
+    // Kick the live UI immediately, then fill settings in the background.
     startPipelineTimer();
     updatePipelineProgress(1, 0, t("canvas.pipeline.stage_start"));
     updateSvgRerunControls();
+    void prefillJobSettings();
+
+    let historyFallbackAttempted = false;
+    let liveStreamSeen = false;
+    let lastLiveEventAt = Date.now();
+    const markLiveStreamActivity = () => {
+      liveStreamSeen = true;
+      lastLiveEventAt = Date.now();
+      if (statusState === "waiting") {
+        statusState = "running";
+        statusText.textContent = t("canvas.running");
+        applyPipelineBadge();
+      }
+    };
 
     const eventSource = new EventSource(engineUrl(`/api/events/${jobId}`));
 
     eventSource.addEventListener("artifact", async (event) => {
+      markLiveStreamActivity();
       const data = JSON.parse(event.data);
       rememberArtifact(data);
 
@@ -3842,6 +3891,7 @@
     });
 
     eventSource.addEventListener("status", (event) => {
+      markLiveStreamActivity();
       const data = JSON.parse(event.data);
       if (data.state === "started") {
         statusState = "running";
@@ -3886,6 +3936,7 @@
     });
 
     eventSource.addEventListener("log", (event) => {
+      markLiveStreamActivity();
       const data = JSON.parse(event.data);
       appendLogLine(logBody, data);
       const line = data.line || "";
@@ -3920,19 +3971,34 @@
       }
     });
 
-    let historyFallbackAttempted = false;
+    eventSource.onopen = () => {
+      markLiveStreamActivity();
+    };
     eventSource.onerror = async () => {
       if (isFinished) {
         eventSource.close();
         return;
       }
-      if (!historyFallbackAttempted) {
+      // EventSource fires transient errors while reconnecting. Never convert a
+      // live run into a history snapshot just because run.log already exists.
+      // Only fall back after the stream was alive and has been quiet, and only
+      // when real pipeline artifacts (not just logs) are on disk.
+      const quietMs = Date.now() - lastLiveEventAt;
+      const canTryHistoryFallback =
+        !historyFallbackAttempted &&
+        liveStreamSeen &&
+        quietMs > 4000;
+      if (canTryHistoryFallback) {
         historyFallbackAttempted = true;
         const loaded = await loadHistoricalJob(true);
         if (loaded) {
           eventSource.close();
           return;
         }
+      }
+      // Keep waiting/reconnecting while the browser still owns the stream.
+      if (eventSource.readyState !== EventSource.CLOSED) {
+        return;
       }
       stopPipelineTimer();
       statusState = "disconnected";
@@ -3945,9 +4011,16 @@
       if (topbarProgressText) {
         topbarProgressText.textContent = `${currentPercentage}% · ${t("canvas.disconnected")}`;
       }
+      if (sideProgressTitle) {
+        sideProgressTitle.textContent = t("canvas.disconnected");
+      }
       if (pipelineLiveLog) {
         pipelineLiveLog.textContent = t("canvas.disconnected");
         pipelineLiveLog.dataset.i18nDefault = "0";
+      }
+      if (sideLiveLog) {
+        sideLiveLog.textContent = t("canvas.disconnected");
+        sideLiveLog.dataset.i18nDefault = "0";
       }
     };
 
@@ -4170,6 +4243,14 @@
           }
         }
         const historicalArtifacts = Array.isArray(item.artifacts) ? item.artifacts : [];
+        // run.log alone is written as soon as /api/run starts. That is not a
+        // completed/partial snapshot and must not stop a live EventSource.
+        const pipelineArtifacts = historicalArtifacts.filter(
+          (artifact) => artifact && artifact.kind && artifact.kind !== "log"
+        );
+        if (!pipelineArtifacts.length) {
+          return false;
+        }
         for (const artifact of historicalArtifacts) {
           rememberArtifact(artifact, false);
         }

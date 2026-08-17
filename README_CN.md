@@ -207,7 +207,7 @@ python server.py
 
 正式安装包由 [`.github/workflows/build-tauri.yml`](.github/workflows/build-tauri.yml) 在 `windows-latest` 上构建。工作流会现场安装 Python 3.12、CPU 版 Torch/TorchVision 和 SAM3，执行 CPU 原生算子与资源检查，然后生成 `python-runtime-cpu.zip` 供 Tauri 打包。`engine/python`、runtime ZIP 和 manifest 都是 CI 产物，不应提交到仓库。
 
-安装包只携带一个 CPU runtime 压缩资源；应用首次启动时会校验并解压到用户数据目录，后续启动按指纹复用。SAM3 与 RMBG 权重仍由用户导入，不包含在安装包中。
+安装包只携带一个 CPU runtime 压缩资源；首次启动会打开进度窗口，校验并解压到用户数据目录，后续启动按指纹复用。SAM3 与 RMBG 权重仍由用户导入，不包含在安装包中。
 
 ---
 

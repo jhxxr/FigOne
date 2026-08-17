@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FigOne · 正在启动</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        background: #10131a;
+        color: #f4f7fb;
+      }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; }
+      body {
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 18% 0%, #26334a 0, #10131a 55%);
+        -webkit-app-region: drag;
+      }
+      main {
+        width: 100%;
+        padding: 38px 42px 34px;
+        text-align: center;
+      }
+      .mark {
+        width: 58px;
+        height: 58px;
+        margin: 0 auto 18px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #78a9ff, #8b6cff);
+        box-shadow: 0 12px 32px #05070c88;
+        font-size: 27px;
+        font-weight: 800;
+        letter-spacing: -2px;
+      }
+      h1 { margin: 0; font-size: 24px; letter-spacing: .2px; }
+      .subtitle { margin: 9px 0 26px; color: #aeb9cb; font-size: 13px; }
+      .status { min-height: 22px; font-size: 14px; color: #e8edf6; }
+      .bar {
+        height: 9px;
+        margin: 14px 0 9px;
+        overflow: hidden;
+        border-radius: 99px;
+        background: #293140;
+      }
+      .fill {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #78a9ff, #a98bff);
+        transition: width .18s ease;
+      }
+      .fill.indeterminate {
+        width: 42%;
+        animation: slide 1.35s ease-in-out infinite;
+      }
+      @keyframes slide {
+        0% { transform: translateX(-115%); }
+        50% { transform: translateX(145%); }
+        100% { transform: translateX(260%); }
+      }
+      .percent { min-height: 19px; color: #93a2b8; font-size: 12px; }
+      .detail {
+        min-height: 36px;
+        margin-top: 17px;
+        color: #8290a6;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .error {
+        display: none;
+        margin-top: 16px;
+        padding: 11px 13px;
+        border: 1px solid #a84e5a;
+        border-radius: 9px;
+        color: #ffc5ca;
+        background: #5b263044;
+        text-align: left;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+      }
+      .error.visible { display: block; }
+      body.ready .fill { width: 100%; }
+      body.ready .detail { color: #9ee2b4; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">F1</div>
+      <h1>FigOne</h1>
+      <div class="subtitle">首次启动正在准备本地 AI 运行环境，请不要关闭窗口</div>
+      <div id="status" class="status">正在启动…</div>
+      <div class="bar" aria-label="启动进度"><div id="fill" class="fill indeterminate"></div></div>
+      <div id="percent" class="percent">准备中</div>
+      <div id="detail" class="detail">第一次启动需要解压 CPU 运行环境，之后会直接复用缓存。</div>
+      <div id="error" class="error"></div>
+    </main>
+    <script>
+      (() => {
+        const status = document.getElementById("status");
+        const fill = document.getElementById("fill");
+        const percent = document.getElementById("percent");
+        const detail = document.getElementById("detail");
+        const error = document.getElementById("error");
+        const tauri = window.__TAURI__;
+        const phaseText = {
+          starting: "正在启动…",
+          checking: "正在检查运行环境…",
+          verifying: "正在校验运行环境…",
+          extracting: "正在解压本地 AI 运行环境…",
+          finalizing: "正在完成运行环境准备…",
+          "starting-engine": "正在启动本地引擎…",
+          ready: "启动完成",
+          error: "启动失败",
+        };
+        function formatBytes(value) {
+          const bytes = Number(value) || 0;
+          if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+          return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+        }
+        function apply(progress) {
+          if (!progress) return;
+          const phase = String(progress.phase || "starting");
+          status.textContent = phaseText[phase] || progress.message || "正在启动…";
+          if (phase === "error") {
+            document.body.classList.remove("ready");
+            fill.classList.remove("indeterminate");
+            fill.style.width = "0%";
+            percent.textContent = "请重启应用后再试";
+            detail.textContent = "如果问题持续，请把下面的错误信息和 runtime 日志提供给开发者。";
+            error.textContent = progress.error || progress.message || "未知启动错误";
+            error.classList.add("visible");
+            return;
+          }
+          error.classList.remove("visible");
+          if (phase === "ready") {
+            document.body.classList.add("ready");
+            fill.classList.remove("indeterminate");
+            fill.style.width = "100%";
+            percent.textContent = "100%";
+            detail.textContent = "正在打开 FigOne…";
+            return;
+          }
+          document.body.classList.remove("ready");
+          const total = Number(progress.totalBytes) || 0;
+          const current = Number(progress.currentBytes) || 0;
+          if (total > 0) {
+            fill.classList.remove("indeterminate");
+            const value = Math.min(100, Math.max(0, Math.round(current / total * 100)));
+            fill.style.width = `${value}%`;
+            percent.textContent = `${value}% · ${formatBytes(current)} / ${formatBytes(total)}`;
+          } else {
+            fill.classList.add("indeterminate");
+            fill.style.width = "42%";
+            percent.textContent = "准备中";
+          }
+          detail.textContent = progress.message || "请稍候…";
+        }
+        async function sync() {
+          try {
+            if (tauri?.core?.invoke) apply(await tauri.core.invoke("startup_status"));
+          } catch (_) { /* The first event may arrive before the invoke bridge. */ }
+        }
+        tauri?.event?.listen?.("startup-progress", (event) => apply(event.payload));
+        sync();
+        window.setInterval(sync, 500);
+      })();
+    </script>
+  </body>
+</html>

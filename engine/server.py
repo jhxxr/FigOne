@@ -961,7 +961,13 @@ def _build_history_item(job_id: str) -> dict | None:
         return None
 
     artifacts = _collect_artifacts(job_id, output_dir)
-    if not artifacts:
+    # A freshly started job only has run.log / settings. That is not a browsable
+    # history snapshot — treating it as one makes the canvas EventSource error
+    # path freeze live runs as "historical" at 0%.
+    pipeline_artifacts = [
+        artifact for artifact in artifacts if artifact.get("kind") != "log"
+    ]
+    if not pipeline_artifacts:
         return None
 
     latest_mtime = _history_sort_key(output_dir)
@@ -975,7 +981,7 @@ def _build_history_item(job_id: str) -> dict | None:
     by_kind = {artifact["kind"]: artifact for artifact in artifacts}
     thumbnail = next(
         (artifact for artifact in artifacts if artifact["kind"] in HISTORY_THUMBNAIL_KINDS),
-        artifacts[0],
+        pipeline_artifacts[0],
     )
     primary = next(
         (by_kind[kind] for kind in HISTORY_PRIMARY_KINDS if kind in by_kind),

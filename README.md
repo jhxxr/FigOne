@@ -207,7 +207,7 @@ python server.py
 
 The release installer is built by [`.github/workflows/build-tauri.yml`](.github/workflows/build-tauri.yml) on `windows-latest`. The workflow installs Python 3.12, CPU-only Torch/TorchVision, and SAM3, runs native CPU operator and package-data checks, then creates `python-runtime-cpu.zip` for the Tauri bundle. `engine/python`, the runtime ZIP, and its manifest are CI outputs and must not be committed.
 
-The installer carries one CPU runtime archive. FigOne verifies and extracts it into the per-user data directory on first launch, then reuses the fingerprinted runtime. SAM3 and RMBG weights remain user-imported data and are not included in the installer.
+The installer carries one CPU runtime archive. FigOne opens a startup progress window while it verifies and extracts the archive into the per-user data directory on first launch, then reuses the fingerprinted runtime on later launches. SAM3 and RMBG weights remain user-imported data and are not included in the installer.
 
 ---
 

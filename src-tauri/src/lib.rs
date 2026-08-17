@@ -5,13 +5,13 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rfd::{AsyncFileDialog, MessageButtons, MessageDialog, MessageLevel};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use zip::ZipArchive;
 
 #[cfg(target_os = "windows")]
@@ -55,6 +55,35 @@ const CPU_RUNTIME_REQUIRED_FILES: &[&str] = &[
 const MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 struct EngineProcess(Mutex<Option<Child>>);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupProgress {
+    phase: String,
+    current_bytes: u64,
+    total_bytes: u64,
+    message: String,
+    error: Option<String>,
+    ready: bool,
+    #[serde(skip)]
+    exit_requested: bool,
+}
+
+impl Default for StartupProgress {
+    fn default() -> Self {
+        Self {
+            phase: "starting".to_string(),
+            current_bytes: 0,
+            total_bytes: 0,
+            message: "正在准备 FigOne…".to_string(),
+            error: None,
+            ready: false,
+            exit_requested: false,
+        }
+    }
+}
+
+struct StartupState(Mutex<StartupProgress>);
 
 #[cfg(target_os = "windows")]
 struct JobObjectHandle(HANDLE);
@@ -649,6 +678,55 @@ fn build_model_status(app: &AppHandle) -> Result<ModelStatus, String> {
     })
 }
 
+fn update_startup_progress(
+    app: &AppHandle,
+    phase: &str,
+    current_bytes: u64,
+    total_bytes: u64,
+    message: impl Into<String>,
+) {
+    let progress = StartupProgress {
+        phase: phase.to_string(),
+        current_bytes,
+        total_bytes,
+        message: message.into(),
+        error: None,
+        ready: phase == "ready",
+        exit_requested: false,
+    };
+    if let Some(state) = app.try_state::<StartupState>() {
+        *state.0.lock().unwrap() = progress.clone();
+    }
+    let _ = app.emit("startup-progress", progress);
+}
+
+fn update_startup_error(app: &AppHandle, error: String) {
+    let progress = StartupProgress {
+        phase: "error".to_string(),
+        current_bytes: 0,
+        total_bytes: 0,
+        message: "FigOne 无法完成启动".to_string(),
+        error: Some(error),
+        ready: false,
+        exit_requested: false,
+    };
+    if let Some(state) = app.try_state::<StartupState>() {
+        *state.0.lock().unwrap() = progress.clone();
+    }
+    let _ = app.emit("startup-progress", progress);
+}
+
+fn request_startup_exit(app: &AppHandle) {
+    if let Some(state) = app.try_state::<StartupState>() {
+        state.0.lock().unwrap().exit_requested = true;
+    }
+}
+
+#[tauri::command]
+fn startup_status(state: State<'_, StartupState>) -> StartupProgress {
+    state.0.lock().unwrap().clone()
+}
+
 fn safe_cpu_runtime_zip_path(name: &str) -> Result<PathBuf, String> {
     let normalized = name.replace('\\', "/");
     let mut relative = PathBuf::new();
@@ -753,13 +831,40 @@ fn validate_cpu_runtime(root: &Path) -> Result<(), String> {
     }
 }
 
-fn extract_cpu_runtime_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+fn extract_cpu_runtime_archive_with_progress<F>(
+    archive_path: &Path,
+    destination: &Path,
+    mut on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
     let file = File::open(archive_path)
         .map_err(|error| format!("无法打开 CPU runtime 压缩包: {error}"))?;
     let mut archive =
         ZipArchive::new(file).map_err(|error| format!("CPU runtime 压缩包损坏: {error}"))?;
-    let mut uncompressed_bytes = 0_u64;
 
+    // Calculate a byte-based denominator before writing anything so the splash can
+    // show a useful percentage instead of appearing frozen on a large archive.
+    let mut total_bytes = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("无法读取 CPU runtime 压缩包条目: {error}"))?;
+        if !entry.is_dir() {
+            total_bytes = total_bytes
+                .checked_add(entry.size())
+                .ok_or_else(|| "CPU runtime 压缩包大小溢出".to_string())?;
+        }
+    }
+    if total_bytes > MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES {
+        return Err("CPU runtime 压缩包解压内容超过安全上限".to_string());
+    }
+    on_progress(0, total_bytes);
+
+    let mut copied_bytes = 0_u64;
+    let mut last_report = Instant::now();
+    let mut buffer = vec![0_u8; 1024 * 1024];
     for index in 0..archive.len() {
         let mut entry = archive
             .by_index(index)
@@ -773,26 +878,43 @@ fn extract_cpu_runtime_archive(archive_path: &Path, destination: &Path) -> Resul
             continue;
         }
 
-        uncompressed_bytes = uncompressed_bytes
-            .checked_add(entry.size())
-            .ok_or_else(|| "CPU runtime 压缩包大小溢出".to_string())?;
-        if uncompressed_bytes > MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES {
-            return Err("CPU runtime 压缩包解压内容超过安全上限".to_string());
-        }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)
                 .map_err(|error| format!("无法创建 runtime 目录 {parent:?}: {error}"))?;
         }
         let mut output = File::create(&target)
             .map_err(|error| format!("无法写入 runtime 文件 {target:?}: {error}"))?;
-        std::io::copy(&mut entry, &mut output)
-            .map_err(|error| format!("无法解压 runtime 文件 {target:?}: {error}"))?;
+        loop {
+            let read = entry
+                .read(&mut buffer)
+                .map_err(|error| format!("无法解压 runtime 文件 {target:?}: {error}"))?;
+            if read == 0 {
+                break;
+            }
+            output
+                .write_all(&buffer[..read])
+                .map_err(|error| format!("无法写入 runtime 文件 {target:?}: {error}"))?;
+            copied_bytes = copied_bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "CPU runtime 解压大小溢出".to_string())?;
+            if copied_bytes > MAX_CPU_RUNTIME_UNCOMPRESSED_BYTES {
+                return Err("CPU runtime 压缩包解压内容超过安全上限".to_string());
+            }
+            if last_report.elapsed() >= Duration::from_millis(100) {
+                on_progress(copied_bytes, total_bytes);
+                last_report = Instant::now();
+            }
+        }
     }
-
+    on_progress(copied_bytes, total_bytes);
+    if copied_bytes != total_bytes {
+        return Err("CPU runtime 压缩包内容长度校验失败".to_string());
+    }
     Ok(())
 }
 
 fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    update_startup_progress(app, "checking", 0, 0, "正在检查 CPU 运行环境…");
     let resource_engine = app
         .path()
         .resource_dir()
@@ -804,6 +926,7 @@ fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     if !archive_path.is_file() {
         let legacy = resource_engine.join("python");
         if legacy.join("python.exe").is_file() {
+            update_startup_progress(app, "ready", 1, 1, "CPU 运行环境已准备好");
             return Ok(legacy);
         }
         return Err(format!(
@@ -821,6 +944,7 @@ fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("无法创建 CPU runtime 缓存目录: {error}"))?;
     let target = cache_parent.join(&fingerprint);
     if cpu_runtime_is_complete(&target, &fingerprint) {
+        update_startup_progress(app, "ready", 1, 1, "CPU 运行环境已准备好");
         return Ok(target);
     }
 
@@ -828,6 +952,10 @@ fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     // runtimes return above without rereading the archive on every application start.
     if let Some(expected) = manifest.as_ref().and_then(|value| value.sha256.as_deref()) {
         if valid_runtime_fingerprint(expected) {
+            let archive_bytes = fs::metadata(&archive_path)
+                .map(|metadata| metadata.len())
+                .unwrap_or_default();
+            update_startup_progress(app, "verifying", 0, archive_bytes, "正在校验 CPU 运行环境…");
             let actual = sha256_file(&archive_path)?;
             if !actual.eq_ignore_ascii_case(expected) {
                 return Err("CPU runtime 压缩包校验失败，文件可能已损坏".to_string());
@@ -847,13 +975,33 @@ fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     fs::create_dir_all(&staging)
         .map_err(|error| format!("无法创建 CPU runtime 临时目录: {error}"))?;
 
-    if let Err(error) = extract_cpu_runtime_archive(&archive_path, &staging)
-        .and_then(|_| validate_cpu_runtime(&staging))
-        .and_then(|_| {
-            fs::write(staging.join(CPU_RUNTIME_COMPLETE_MARKER), &fingerprint)
-                .map_err(|error| format!("无法写入 CPU runtime 完成标记: {error}"))
-        })
-    {
+    update_startup_progress(app, "extracting", 0, 0, "首次启动正在准备运行环境…");
+    let mut last_progress = Instant::now() - Duration::from_secs(1);
+    if let Err(error) = extract_cpu_runtime_archive_with_progress(
+        &archive_path,
+        &staging,
+        |copied_bytes, total_bytes| {
+            if last_progress.elapsed() >= Duration::from_millis(100) || copied_bytes == total_bytes
+            {
+                update_startup_progress(
+                    app,
+                    "extracting",
+                    copied_bytes,
+                    total_bytes,
+                    "首次启动正在解压运行环境…",
+                );
+                last_progress = Instant::now();
+            }
+        },
+    )
+    .and_then(|_| {
+        update_startup_progress(app, "finalizing", 1, 1, "正在完成运行环境准备…");
+        validate_cpu_runtime(&staging)
+    })
+    .and_then(|_| {
+        fs::write(staging.join(CPU_RUNTIME_COMPLETE_MARKER), &fingerprint)
+            .map_err(|error| format!("无法写入 CPU runtime 完成标记: {error}"))
+    }) {
         let _ = fs::remove_dir_all(&staging);
         return Err(error);
     }
@@ -861,12 +1009,14 @@ fn ensure_cpu_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     if let Err(error) = fs::rename(&staging, &target) {
         if target.exists() && cpu_runtime_is_complete(&target, &fingerprint) {
             let _ = fs::remove_dir_all(&staging);
+            update_startup_progress(app, "ready", 1, 1, "CPU 运行环境已准备好");
             return Ok(target);
         }
         let _ = fs::remove_dir_all(&staging);
         return Err(format!("无法启用 CPU runtime: {error}"));
     }
 
+    update_startup_progress(app, "ready", 1, 1, "CPU 运行环境已准备好");
     Ok(target)
 }
 
@@ -997,6 +1147,7 @@ fn launch_engine(app: &AppHandle) -> Result<(Child, u16, PathBuf), String> {
         log::info!("Bundled CPU Python runtime ready at {}", root.display());
         root.join("python.exe").display().to_string()
     };
+    update_startup_progress(app, "starting-engine", 1, 1, "正在启动本地引擎…");
     let mut last_failure: Option<String> = None;
     let mut last_log_path = app_data_dir(app)?
         .join("runtime")
@@ -1029,6 +1180,7 @@ fn launch_engine(app: &AppHandle) -> Result<(Child, u16, PathBuf), String> {
 
         match wait_for_engine(&mut child, port) {
             Ok(()) => {
+                update_startup_progress(app, "ready", 1, 1, "FigOne 已准备好");
                 log::info!("FigOne Engine is ready on port {port}, pid {}", child.id());
                 #[cfg(target_os = "windows")]
                 std::mem::forget(job);
@@ -1490,51 +1642,18 @@ fn delete_provider_profile(app: AppHandle, id: String) -> Result<ProviderProfile
     Ok(exposed_provider_profiles(store))
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .manage(EngineProcess(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![
-            model_status,
-            import_sam3_model,
-            remove_sam3_model,
-            rmbg_model_status,
-            import_rmbg_weights,
-            remove_rmbg_model,
-            list_provider_profiles,
-            active_provider_profile,
-            save_provider_profile,
-            activate_provider_profile,
-            delete_provider_profile
-        ])
-        .setup(|app| {
-            app.handle().plugin(
-                tauri_plugin_log::Builder::default()
-                    .level(log::LevelFilter::Info)
-                    .build(),
-            )?;
-
-            let (mut engine, port, log_path) = match launch_engine(app.handle()) {
-                Ok(result) => result,
-                Err(error) => {
-                    log::error!("FigOne Engine startup failed: {error}");
-                    MessageDialog::new()
-                        .set_level(MessageLevel::Error)
-                        .set_title("FigOne 启动失败")
-                        .set_description(format!(
-                            "本地 FigOne 引擎无法启动。\n\n{error}\n\n请重启应用；若问题持续，请提供该日志文件。"
-                        ))
-                        .set_buttons(MessageButtons::Ok)
-                        .show();
-                    return Err(std::io::Error::other(error).into());
-                }
-            };
-            // Load the shell from the local app origin so Tauri does not treat the UI as
-            // remote content. Without an app ACL permissions directory, local app commands
-            // stay unrestricted and new invoke handlers do not need ACL allowlist updates.
-            let engine_origin = format!("http://127.0.0.1:{port}");
-            let init_script = format!(
-                r#"(function () {{
+fn create_main_window(
+    app: &AppHandle,
+    mut engine: Child,
+    port: u16,
+    log_path: PathBuf,
+) -> Result<(), String> {
+    // Load the shell from the local app origin so Tauri does not treat the UI as
+    // remote content. Without an app ACL permissions directory, local app commands
+    // stay unrestricted and new invoke handlers do not need ACL allowlist updates.
+    let engine_origin = format!("http://127.0.0.1:{port}");
+    let init_script = format!(
+        r#"(function () {{
   var origin = {engine_origin};
   try {{
     Object.defineProperty(window, "__FIGONE_ENGINE_ORIGIN__", {{
@@ -1554,36 +1673,140 @@ pub fn run() {
     window.__FIGRA_ENGINE_ORIGIN__ = origin;
   }}
 }})();"#,
-                engine_origin = serde_json::to_string(&engine_origin).unwrap_or_else(|_| {
-                    format!("\"http://127.0.0.1:{port}\"")
-                })
-            );
-            log::info!(
-                "Creating main window from local app assets; engine API at {engine_origin}/; engine log: {}",
-                log_path.display()
-            );
-            if let Err(error) = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        engine_origin = serde_json::to_string(&engine_origin)
+            .unwrap_or_else(|_| format!("\"http://127.0.0.1:{port}\""))
+    );
+    log::info!(
+        "Creating main window from local app assets; engine API at {engine_origin}/; engine log: {}",
+        log_path.display()
+    );
+    if let Err(error) = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("FigOne")
+        .inner_size(800.0, 600.0)
+        .resizable(true)
+        .fullscreen(false)
+        .initialization_script(init_script)
+        .build()
+    {
+        let _ = engine.kill();
+        let _ = engine.wait();
+        return Err(format!("无法创建 FigOne 主窗口: {error}"));
+    }
+
+    *app.state::<EngineProcess>().0.lock().unwrap() = Some(engine);
+    update_startup_progress(app, "ready", 1, 1, "FigOne 已准备好");
+    if let Some(startup) = app.get_webview_window("startup") {
+        let _ = startup.close();
+    }
+    Ok(())
+}
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .manage(EngineProcess(Mutex::new(None)))
+        .manage(StartupState(Mutex::new(StartupProgress::default())))
+        .invoke_handler(tauri::generate_handler![
+            startup_status,
+            model_status,
+            import_sam3_model,
+            remove_sam3_model,
+            rmbg_model_status,
+            import_rmbg_weights,
+            remove_rmbg_model,
+            list_provider_profiles,
+            active_provider_profile,
+            save_provider_profile,
+            activate_provider_profile,
+            delete_provider_profile
+        ])
+        .setup(|app| {
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
+
+            // Show a real window before preparing the bundled runtime. The old startup
+            // path did all of this synchronously inside setup, leaving users with no
+            // feedback while ~1.5 GB / 24k files were extracted on the first launch.
+            WebviewWindowBuilder::new(app, "startup", WebviewUrl::App("startup.html".into()))
                 .title("FigOne")
-                .inner_size(800.0, 600.0)
-                .resizable(true)
-                .fullscreen(false)
-                .initialization_script(init_script)
-                .build()
-            {
-                let _ = engine.kill();
-                let _ = engine.wait();
-                return Err(Box::new(error));
-            }
-            *app.state::<EngineProcess>().0.lock().unwrap() = Some(engine);
+                .inner_size(520.0, 340.0)
+                .resizable(false)
+                .center()
+                .build()?;
+
+            let worker_app = app.handle().clone();
+            thread::spawn(move || match launch_engine(&worker_app) {
+                Ok((engine, port, log_path)) => {
+                    let ui_app = worker_app.clone();
+                    if let Err(error) = worker_app.run_on_main_thread(move || {
+                        if let Err(error) = create_main_window(&ui_app, engine, port, log_path) {
+                            log::error!("FigOne main window creation failed: {error}");
+                            update_startup_error(&ui_app, error.clone());
+                            MessageDialog::new()
+                                .set_level(MessageLevel::Error)
+                                .set_title("FigOne 启动失败")
+                                .set_description(error)
+                                .set_buttons(MessageButtons::Ok)
+                                .show();
+                            request_startup_exit(&ui_app);
+                            ui_app.exit(1);
+                        }
+                    }) {
+                        log::error!("Could not dispatch FigOne main window creation: {error}");
+                        update_startup_error(&worker_app, error.to_string());
+                        request_startup_exit(&worker_app);
+                        worker_app.exit(1);
+                    }
+                }
+                Err(error) => {
+                    log::error!("FigOne Engine startup failed: {error}");
+                    update_startup_error(&worker_app, error.clone());
+                    let ui_app = worker_app.clone();
+                    if let Err(dispatch_error) = worker_app.run_on_main_thread(move || {
+                        MessageDialog::new()
+                            .set_level(MessageLevel::Error)
+                            .set_title("FigOne 启动失败")
+                            .set_description(format!(
+                                "本地 FigOne 引擎无法启动。\n\n{error}\n\n请重启应用；若问题持续，请提供该日志文件。"
+                            ))
+                            .set_buttons(MessageButtons::Ok)
+                            .show();
+                        request_startup_exit(&ui_app);
+                        ui_app.exit(1);
+                    }) {
+                        log::error!("Could not show FigOne startup error: {dispatch_error}");
+                        request_startup_exit(&worker_app);
+                        worker_app.exit(1);
+                    }
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
-            if matches!(event, WindowEvent::CloseRequested { .. }) {
-                if let Some(state) = window.try_state::<EngineProcess>() {
-                    if let Some(mut child) = state.0.lock().unwrap().take() {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                    }
+            if !matches!(event, WindowEvent::CloseRequested { .. }) {
+                return;
+            }
+            if window.label() == "startup" {
+                let should_force_exit = window
+                    .try_state::<StartupState>()
+                    .map(|state| {
+                        let progress = state.0.lock().unwrap();
+                        !progress.ready && !progress.exit_requested
+                    })
+                    .unwrap_or(false);
+                if should_force_exit {
+                    // No engine child is exposed until startup completes. Exiting here
+                    // prevents a closing splash from leaving the worker thread behind.
+                    std::process::exit(0);
+                }
+                return;
+            }
+            if let Some(state) = window.try_state::<EngineProcess>() {
+                if let Some(mut child) = state.0.lock().unwrap().take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
                 }
             }
         })
@@ -1627,7 +1850,8 @@ mod tests {
             writer.finish().expect("finish test archive");
         }
 
-        extract_cpu_runtime_archive(&archive_path, &destination).expect("extract test archive");
+        extract_cpu_runtime_archive_with_progress(&archive_path, &destination, |_, _| {})
+            .expect("extract test archive");
         validate_cpu_runtime(&destination).expect("validate extracted runtime");
         fs::remove_dir_all(&root).expect("remove test directory");
     }
