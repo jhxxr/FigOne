@@ -109,20 +109,23 @@ jobs:
           }
 
           Copy-Item $python.Directory.FullName $runtime -Recurse
-          $externallyManaged = "$runtime/EXTERNALLY-MANAGED"
-          if (Test-Path $externallyManaged) {
-            Remove-Item $externallyManaged -Force
-          }
 
-          # uv-managed CPython is usually pip-ready; bootstrap ensurepip if a clean
-          # install ever ships without it so the rest of the job fails clearly.
-          & "$runtime/python.exe" -c "import ensurepip, sys; ensurepip.bootstrap(upgrade=True); print('ensurepip ready:', sys.executable)"
-          & "$runtime/python.exe" -m pip install --break-system-packages --upgrade pip wheel "setuptools<81"
-          & "$runtime/python.exe" -m pip install --break-system-packages `
+          # uv ships PEP 668 markers under Lib\ on Windows. Remove every copy so this
+          # private bundled interpreter can be populated with FigOne's CPU deps.
+          Get-ChildItem -Path $runtime -Filter EXTERNALLY-MANAGED -Recurse -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+
+          # Prefer an existing pip module; only bootstrap when the copied runtime lacks it.
+          $pipProbe = & "$runtime/python.exe" -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('pip') else 1)"
+          if ($LASTEXITCODE -ne 0) {
+            & "$runtime/python.exe" -c "import ensurepip, sys; ensurepip.bootstrap(upgrade=True); print('ensurepip ready:', sys.executable)"
+          }
+          & "$runtime/python.exe" -m pip install --upgrade pip wheel "setuptools<81"
+          & "$runtime/python.exe" -m pip install `
             --extra-index-url https://download.pytorch.org/whl/cpu `
             torch==2.7.1+cpu torchvision==0.22.1+cpu
-          & "$runtime/python.exe" -m pip install --break-system-packages -r engine/requirements-runtime.txt
-          & "$runtime/python.exe" -m pip install --break-system-packages --no-deps engine/sam3-src
+          & "$runtime/python.exe" -m pip install -r engine/requirements-runtime.txt
+          & "$runtime/python.exe" -m pip install --no-deps engine/sam3-src
           & "$runtime/python.exe" -c "import fastapi, torch, torchvision, transformers, einops, kornia, timm; assert torch.__version__.startswith('2.7.1') and '+cpu' in torch.__version__; assert torchvision.__version__.startswith('0.22.1') and '+cpu' in torchvision.__version__; assert not torch.cuda.is_available(); print('CPU core imports passed:', torch.__version__, torchvision.__version__)"
           & "$runtime/python.exe" -c "import torch; from torchvision.ops import roi_align; x=torch.randn(1,1,4,4); boxes=torch.tensor([[0,0,0,3,3]], dtype=torch.float32); y=roi_align(x, boxes, output_size=(2,2)); assert tuple(y.shape) == (1,1,2,2); print('TorchVision CPU operator passed')"
           & "$runtime/python.exe" -c "from pathlib import Path; import sam3; import sam3.model_builder; package=Path(sam3.__file__).resolve().parent; asset=package/'assets'/'bpe_simple_vocab_16e6.txt.gz'; assert asset.is_file(), asset; print('SAM3 package and BPE asset passed:', asset)"
