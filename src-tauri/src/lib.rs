@@ -727,6 +727,16 @@ fn startup_status(state: State<'_, StartupState>) -> StartupProgress {
     state.0.lock().unwrap().clone()
 }
 
+#[tauri::command]
+fn close_startup_window(app: AppHandle) {
+    // Closing the frameless splash should abort bootstrap before the main window exists.
+    request_startup_exit(&app);
+    if let Some(startup) = app.get_webview_window("startup") {
+        let _ = startup.close();
+    }
+    app.exit(0);
+}
+
 fn safe_cpu_runtime_zip_path(name: &str) -> Result<PathBuf, String> {
     let normalized = name.replace('\\', "/");
     let mut relative = PathBuf::new();
@@ -1707,6 +1717,7 @@ pub fn run() {
         .manage(StartupState(Mutex::new(StartupProgress::default())))
         .invoke_handler(tauri::generate_handler![
             startup_status,
+            close_startup_window,
             model_status,
             import_sam3_model,
             remove_sam3_model,
@@ -1729,10 +1740,17 @@ pub fn run() {
             // Show a real window before preparing the bundled runtime. The old startup
             // path did all of this synchronously inside setup, leaving users with no
             // feedback while ~1.5 GB / 24k files were extracted on the first launch.
+            // Frameless splash keeps the Claude-like parchment UI free of native chrome.
+            // Windows still gets a soft system shadow / rounded outline via shadow(true).
             WebviewWindowBuilder::new(app, "startup", WebviewUrl::App("startup.html".into()))
                 .title("FigOne")
-                .inner_size(520.0, 340.0)
+                .inner_size(560.0, 380.0)
                 .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .closable(true)
+                .decorations(false)
+                .shadow(true)
                 .center()
                 .build()?;
 

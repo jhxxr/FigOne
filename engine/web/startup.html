@@ -6,100 +6,405 @@
     <title>FigOne · 正在启动</title>
     <style>
       :root {
-        color-scheme: dark;
-        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-        background: #10131a;
-        color: #f4f7fb;
+        color-scheme: light;
+        --bg: #faf9f5;
+        --bg-subtle: #f3f1ea;
+        --bg-sunken: #edeae1;
+        --panel: #ffffff;
+        --ink: #191817;
+        --ink-secondary: #44423d;
+        --muted: #74726a;
+        --muted-light: #9c9a91;
+        --accent: #cc5a36;
+        --accent-strong: #b64826;
+        --accent-soft: #f7ebe5;
+        --accent-border: rgba(204, 90, 54, 0.28);
+        --accent-glow: rgba(204, 90, 54, 0.12);
+        --success: #2a7e4f;
+        --success-soft: #ebf5ee;
+        --danger: #b83a2e;
+        --danger-strong: #9e2b20;
+        --danger-soft: #fbecf0;
+        --danger-border: rgba(184, 58, 46, 0.28);
+        --line: #e6e3da;
+        --line-subtle: #eeece4;
+        --shadow: 0 1px 3px rgba(25, 24, 23, 0.05), 0 4px 12px rgba(25, 24, 23, 0.02);
+        --shadow-lifted: 0 6px 20px rgba(25, 24, 23, 0.07), 0 1px 4px rgba(25, 24, 23, 0.04);
+        --font-display: "Source Serif 4", Georgia, "Songti SC", "SimSun", serif;
+        --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        --radius-card: 14px;
+        --radius-control: 8px;
+        --radius-pill: 9999px;
       }
-      * { box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; margin: 0; }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
       body {
-        display: grid;
-        place-items: center;
-        background: radial-gradient(circle at 18% 0%, #26334a 0, #10131a 55%);
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        font-family: var(--font-ui);
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        height: 100%;
         -webkit-app-region: drag;
       }
-      main {
-        width: 100%;
-        padding: 38px 42px 34px;
-        text-align: center;
+
+      .card {
+        position: relative;
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+        padding: 34px 38px 30px;
+        border: 0;
+        border-radius: 0;
+        background:
+          radial-gradient(circle at top right, rgba(247, 235, 229, 0.95), transparent 42%),
+          linear-gradient(180deg, #fffcf7 0%, var(--bg) 48%, #f4f1e8 100%);
+        overflow: hidden;
       }
-      .mark {
-        width: 58px;
-        height: 58px;
-        margin: 0 auto 18px;
+
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(25, 24, 23, 0.015) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(25, 24, 23, 0.015) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(circle at center, black 35%, transparent 88%);
+        pointer-events: none;
+      }
+
+      .close {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        z-index: 2;
+        width: 30px;
+        height: 30px;
         display: grid;
         place-items: center;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #78a9ff, #8b6cff);
-        box-shadow: 0 12px 32px #05070c88;
-        font-size: 27px;
-        font-weight: 800;
-        letter-spacing: -2px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease,
+          color 0.15s ease;
       }
-      h1 { margin: 0; font-size: 24px; letter-spacing: .2px; }
-      .subtitle { margin: 9px 0 26px; color: #aeb9cb; font-size: 13px; }
-      .status { min-height: 22px; font-size: 14px; color: #e8edf6; }
+
+      .close:hover {
+        background: var(--bg-subtle);
+        border-color: var(--line);
+        color: var(--ink);
+      }
+
+      .close:active {
+        background: var(--bg-sunken);
+      }
+
+      .close svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .content {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        gap: 18px;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .logo {
+        width: 48px;
+        height: 48px;
+        flex: 0 0 auto;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        object-fit: contain;
+        background: var(--panel);
+      }
+
+      .brand-copy {
+        min-width: 0;
+      }
+
+      .eyebrow {
+        margin: 0 0 4px;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--ink);
+        font-family: var(--font-display);
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+      }
+
+      .lede {
+        margin: 0;
+        max-width: 34em;
+        color: var(--ink-secondary);
+        font-size: 13.5px;
+        line-height: 1.55;
+      }
+
+      .progress-panel {
+        display: grid;
+        gap: 10px;
+        padding: 16px 16px 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-card);
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: var(--shadow);
+      }
+
+      .status-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .status {
+        color: var(--ink);
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+
+      .percent {
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
       .bar {
-        height: 9px;
-        margin: 14px 0 9px;
+        position: relative;
+        height: 8px;
         overflow: hidden;
-        border-radius: 99px;
-        background: #293140;
+        border-radius: var(--radius-pill);
+        background: var(--bg-sunken);
       }
+
       .fill {
+        position: relative;
         width: 0%;
         height: 100%;
         border-radius: inherit;
-        background: linear-gradient(90deg, #78a9ff, #a98bff);
-        transition: width .18s ease;
+        background: linear-gradient(90deg, var(--accent-strong), var(--accent) 55%, #e08a55);
+        box-shadow: 0 0 0 1px rgba(204, 90, 54, 0.08);
+        transition: width 0.18s ease;
       }
+
+      .fill::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(255, 255, 255, 0.35) 50%,
+          transparent 100%
+        );
+        transform: translateX(-120%);
+        animation: sheen 1.8s ease-in-out infinite;
+      }
+
       .fill.indeterminate {
-        width: 42%;
+        width: 38%;
         animation: slide 1.35s ease-in-out infinite;
       }
+
+      .fill.indeterminate::after {
+        animation: none;
+      }
+
       @keyframes slide {
-        0% { transform: translateX(-115%); }
-        50% { transform: translateX(145%); }
-        100% { transform: translateX(260%); }
+        0% {
+          transform: translateX(-120%);
+        }
+        50% {
+          transform: translateX(170%);
+        }
+        100% {
+          transform: translateX(280%);
+        }
       }
-      .percent { min-height: 19px; color: #93a2b8; font-size: 12px; }
+
+      @keyframes sheen {
+        0%,
+        30% {
+          transform: translateX(-120%);
+        }
+        70%,
+        100% {
+          transform: translateX(120%);
+        }
+      }
+
       .detail {
-        min-height: 36px;
-        margin-top: 17px;
-        color: #8290a6;
-        font-size: 12px;
-        line-height: 1.55;
+        margin: 0;
+        min-height: 1.45em;
+        color: var(--muted);
+        font-size: 12.5px;
+        line-height: 1.5;
       }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--muted);
+        font-size: 11.5px;
+      }
+
+      .chip-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+
       .error {
         display: none;
-        margin-top: 16px;
-        padding: 11px 13px;
-        border: 1px solid #a84e5a;
-        border-radius: 9px;
-        color: #ffc5ca;
-        background: #5b263044;
-        text-align: left;
+        margin: 0;
+        padding: 12px 13px;
+        border: 1px solid var(--danger-border);
+        border-radius: var(--radius-control);
+        background: var(--danger-soft);
+        color: var(--danger-strong);
+        font-size: 12px;
+        line-height: 1.5;
         white-space: pre-wrap;
         word-break: break-word;
-        font-size: 12px;
+        -webkit-app-region: no-drag;
+        user-select: text;
       }
-      .error.visible { display: block; }
-      body.ready .fill { width: 100%; }
-      body.ready .detail { color: #9ee2b4; }
+
+      .error.visible {
+        display: block;
+      }
+
+      body.ready .fill {
+        width: 100%;
+        background: linear-gradient(90deg, #2f8a57, #3ea46b);
+      }
+
+      body.ready .detail {
+        color: var(--success);
+      }
+
+      body.ready .chip-dot {
+        background: var(--success);
+        box-shadow: 0 0 0 3px rgba(42, 126, 79, 0.12);
+      }
+
+      body.error .fill {
+        width: 100%;
+        background: linear-gradient(90deg, #b83a2e, #d36457);
+      }
+
+      body.error .status {
+        color: var(--danger-strong);
+      }
     </style>
   </head>
   <body>
-    <main>
-      <div class="mark" aria-hidden="true">F1</div>
-      <h1>FigOne</h1>
-      <div class="subtitle">首次启动正在准备本地 AI 运行环境，请不要关闭窗口</div>
-      <div id="status" class="status">正在启动…</div>
-      <div class="bar" aria-label="启动进度"><div id="fill" class="fill indeterminate"></div></div>
-      <div id="percent" class="percent">准备中</div>
-      <div id="detail" class="detail">第一次启动需要解压 CPU 运行环境，之后会直接复用缓存。</div>
-      <div id="error" class="error"></div>
-    </main>
+    <div class="shell">
+      <section class="card" aria-live="polite">
+        <button class="close" id="closeBtn" type="button" aria-label="关闭" title="关闭">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M4 4l8 8M12 4L4 12"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+
+        <div class="content">
+          <div class="brand-row">
+            <img class="logo" src="./favicon.svg" alt="" width="48" height="48" />
+            <div class="brand-copy">
+              <p class="eyebrow">FigOne Desktop</p>
+              <h1>正在准备 FigOne</h1>
+            </div>
+          </div>
+
+          <p class="lede" id="lede">
+            首次启动会准备本地 AI 运行环境。完成后会直接打开主界面，后续启动会复用缓存。
+          </p>
+
+          <div class="progress-panel">
+            <div class="status-row">
+              <div id="status" class="status">正在启动…</div>
+              <div id="percent" class="percent">准备中</div>
+            </div>
+            <div class="bar" aria-label="启动进度">
+              <div id="fill" class="fill indeterminate"></div>
+            </div>
+            <p id="detail" class="detail">请稍候，正在连接本地启动流程…</p>
+          </div>
+
+          <div class="meta">
+            <span class="chip"><span class="chip-dot" aria-hidden="true"></span>本地引擎</span>
+            <span class="chip">CPU Runtime</span>
+            <span class="chip">不上传模型权重</span>
+          </div>
+
+          <pre id="error" class="error"></pre>
+        </div>
+      </section>
+    </div>
+
     <script>
       (() => {
         const status = document.getElementById("status");
@@ -107,6 +412,8 @@
         const percent = document.getElementById("percent");
         const detail = document.getElementById("detail");
         const error = document.getElementById("error");
+        const lede = document.getElementById("lede");
+        const closeBtn = document.getElementById("closeBtn");
         const tauri = window.__TAURI__;
         const phaseText = {
           starting: "正在启动…",
@@ -118,54 +425,91 @@
           ready: "启动完成",
           error: "启动失败",
         };
+
         function formatBytes(value) {
           const bytes = Number(value) || 0;
-          if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+          if (bytes <= 0) return "0 KB";
+          if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+          if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
           return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
         }
+
         function apply(progress) {
           if (!progress) return;
           const phase = String(progress.phase || "starting");
           status.textContent = phaseText[phase] || progress.message || "正在启动…";
+
           if (phase === "error") {
             document.body.classList.remove("ready");
+            document.body.classList.add("error");
             fill.classList.remove("indeterminate");
-            fill.style.width = "0%";
-            percent.textContent = "请重启应用后再试";
+            fill.style.width = "100%";
+            percent.textContent = "需要处理";
             detail.textContent = "如果问题持续，请把下面的错误信息和 runtime 日志提供给开发者。";
+            lede.textContent = "FigOne 没能完成启动准备。你可以关闭窗口后重试。";
             error.textContent = progress.error || progress.message || "未知启动错误";
             error.classList.add("visible");
             return;
           }
+
+          document.body.classList.remove("error");
           error.classList.remove("visible");
+          error.textContent = "";
+
           if (phase === "ready") {
             document.body.classList.add("ready");
             fill.classList.remove("indeterminate");
             fill.style.width = "100%";
             percent.textContent = "100%";
-            detail.textContent = "正在打开 FigOne…";
+            detail.textContent = "正在打开 FigOne 主界面…";
+            lede.textContent = "运行环境已就绪，马上进入工作台。";
             return;
           }
+
           document.body.classList.remove("ready");
           const total = Number(progress.totalBytes) || 0;
           const current = Number(progress.currentBytes) || 0;
           if (total > 0) {
             fill.classList.remove("indeterminate");
-            const value = Math.min(100, Math.max(0, Math.round(current / total * 100)));
+            const value = Math.min(100, Math.max(0, Math.round((current / total) * 100)));
             fill.style.width = `${value}%`;
             percent.textContent = `${value}% · ${formatBytes(current)} / ${formatBytes(total)}`;
           } else {
             fill.classList.add("indeterminate");
-            fill.style.width = "42%";
+            fill.style.width = "38%";
             percent.textContent = "准备中";
           }
           detail.textContent = progress.message || "请稍候…";
+          if (phase === "extracting") {
+            lede.textContent =
+              "首次启动需要解压本地 CPU 运行环境。这可能需要几分钟，完成后会自动打开主界面。";
+          } else if (phase === "verifying") {
+            lede.textContent = "正在校验安装包中的运行环境，确保文件完整后再继续。";
+          } else if (phase === "starting-engine") {
+            lede.textContent = "运行环境已就绪，正在拉起本地 FigOne 引擎。";
+          }
         }
+
         async function sync() {
           try {
             if (tauri?.core?.invoke) apply(await tauri.core.invoke("startup_status"));
-          } catch (_) { /* The first event may arrive before the invoke bridge. */ }
+          } catch (_) {
+            /* The first event may arrive before the invoke bridge. */
+          }
         }
+
+        closeBtn?.addEventListener("click", async () => {
+          try {
+            await tauri?.core?.invoke?.("close_startup_window");
+          } catch (_) {
+            try {
+              await tauri?.webviewWindow?.getCurrent?.()?.close?.();
+            } catch (_) {
+              /* Ignore close failures during early bootstrap. */
+            }
+          }
+        });
+
         tauri?.event?.listen?.("startup-progress", (event) => apply(event.payload));
         sync();
         window.setInterval(sync, 500);

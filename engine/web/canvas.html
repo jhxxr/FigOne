@@ -37,23 +37,26 @@
               <option value="0.4">Compressed 40%</option>
               <option value="0.25">Small 25%</option>
             </select>
-            <label class="svg-rerun-label" id="canvasSvgModelLabel" for="canvasSvgModel">SVG model</label>
+            <label class="svg-rerun-label" id="canvasSvgModelLabel" for="canvasSvgModelSelect">SVG model</label>
+            <select
+              id="canvasSvgModelSelect"
+              class="input svg-rerun-select svg-rerun-model"
+              title="SVG multimodal model"
+            >
+              <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+              <option value="gpt-5.5">gpt-5.5</option>
+              <option value="claude-3-7-sonnet">claude-3-7-sonnet</option>
+              <option value="google/gemini-3.1-pro-preview">google/gemini-3.1-pro-preview</option>
+            </select>
             <input
               id="canvasSvgModel"
-              class="input svg-rerun-select svg-rerun-model"
+              class="input svg-rerun-select svg-rerun-model-custom"
               type="text"
-              list="canvasSvgModelOptions"
               autocomplete="off"
               spellcheck="false"
-              placeholder="gemini-3.1-pro-preview"
-              title="SVG multimodal model"
+              placeholder="or type model id"
+              title="SVG multimodal model id"
             />
-            <datalist id="canvasSvgModelOptions">
-              <option value="gemini-3.1-pro-preview"></option>
-              <option value="gpt-5.5"></option>
-              <option value="claude-3-7-sonnet"></option>
-              <option value="google/gemini-3.1-pro-preview"></option>
-            </datalist>
             <button class="ghost primary" id="regenerateSvgBtn" type="button">Regenerate SVG</button>
           </div>
 

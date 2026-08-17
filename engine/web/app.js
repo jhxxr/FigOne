@@ -378,10 +378,11 @@
         resume_failed: "Failed to resume job",
         svg_rerun_label: "SVG preview",
         svg_rerun_model_label: "SVG model",
-        svg_rerun_model_title: "Multimodal model id used for SVG rebuild. Pick a preset or type any model id.",
+        svg_rerun_model_title:
+          "Multimodal / SVG rebuild model only. Choose a preset from the dropdown, or type any model id. This never changes the image/draw model.",
         svg_rerun_btn: "Regenerate SVG",
         svg_rerun_hint:
-          "Rebuild only the multimodal SVG step. You can change preview ratio and SVG model. SAM3 and icon matting are reused.",
+          "Rebuild only the multimodal SVG step. You can change preview ratio and the SVG/multimodal model. Image/draw model stays separate. SAM3 and icon matting are reused.",
         svg_rerunning: "Regenerating SVG...",
         svg_rerun_need_profile: "Add a provider profile with API key before regenerating SVG.",
         svg_rerun_need_artifacts: "Need figure.png, samed.png, and icons before regenerating SVG.",
@@ -755,9 +756,11 @@
         resume_failed: "续跑失败",
         svg_rerun_label: "SVG 预览比例",
         svg_rerun_model_label: "SVG 模型",
-        svg_rerun_model_title: "重跑 SVG 使用的多模态模型 id。可点选推荐项，也可直接手填。",
+        svg_rerun_model_title:
+          "仅用于多模态 / SVG 重建。可从下拉选择推荐模型，也可手填任意模型 ID。不会改动画图模型。",
         svg_rerun_btn: "重跑 SVG",
-        svg_rerun_hint: "只重跑多模态 SVG 步骤，可改预览压缩比例与模型。SAM3 与图标抠图会直接复用。",
+        svg_rerun_hint:
+          "只重跑多模态 SVG 步骤，可改预览压缩比例与多模态模型。画图模型保持独立。SAM3 与图标抠图会直接复用。",
         svg_rerunning: "正在重跑 SVG...",
         svg_rerun_need_profile: "请先在「模型与提供商」配置带 API Key 的配置。",
         svg_rerun_need_artifacts: "至少需要 figure.png、samed.png 与图标产物才能重跑 SVG。",
@@ -995,6 +998,22 @@
     return `${providerLabel} · ${svgModel} · ${keyLabel}\n${imageLine}`;
   }
 
+  const SVG_MODEL_PRESETS = [
+    "gemini-3.1-pro-preview",
+    "gpt-5.5",
+    "claude-3-7-sonnet",
+    "google/gemini-3.1-pro-preview",
+  ];
+
+  const IMAGE_MODEL_PRESETS = [
+    "gpt-image-2",
+    "gemini-3.1-flash-image-preview",
+    "dall-e-3",
+    "google/gemini-3.1-flash-image-preview",
+  ];
+
+  const CUSTOM_MODEL_OPTION = "__custom__";
+
   function getDefaultSvgModelForProvider(provider) {
     const normalized = normalizeProviderValue(provider);
     if (normalized === "openai_response") return "gpt-5.5";
@@ -1007,6 +1026,99 @@
     if (normalized === "openai" || normalized === "bianxie") return "gpt-image-2";
     if (normalized === "openrouter") return "google/gemini-3.1-flash-image-preview";
     return "gemini-3.1-flash-image-preview";
+  }
+
+  function uniqueModelList(values) {
+    const seen = new Set();
+    const result = [];
+    for (const raw of values || []) {
+      const value = typeof raw === "string" ? raw.trim() : "";
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      result.push(value);
+    }
+    return result;
+  }
+
+  function fillModelSelectOptions(selectEl, presets, currentValue, { includeCustom = true } = {}) {
+    if (!selectEl) return "";
+    const current = typeof currentValue === "string" ? currentValue.trim() : "";
+    const options = uniqueModelList([...(presets || []), current]);
+    selectEl.replaceChildren();
+    for (const value of options) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      selectEl.appendChild(option);
+    }
+    if (includeCustom) {
+      const customOption = document.createElement("option");
+      customOption.value = CUSTOM_MODEL_OPTION;
+      customOption.textContent =
+        currentLocale === "zh" ? "自定义模型 ID…" : "Custom model id…";
+      selectEl.appendChild(customOption);
+    }
+    if (current && options.includes(current)) {
+      selectEl.value = current;
+    } else if (current) {
+      selectEl.value = CUSTOM_MODEL_OPTION;
+    } else if (options.length) {
+      selectEl.value = options[0];
+    }
+    return selectEl.value === CUSTOM_MODEL_OPTION
+      ? current
+      : selectEl.value || current || "";
+  }
+
+  function resolveModelChoice(selectEl, inputEl, fallback = "") {
+    const typed = inputEl?.value?.trim() || "";
+    if (typed) return typed;
+    const selected = selectEl?.value?.trim() || "";
+    if (selected && selected !== CUSTOM_MODEL_OPTION) return selected;
+    return fallback || "";
+  }
+
+  function syncModelChoiceControls(selectEl, inputEl, value, presets) {
+    const next = typeof value === "string" ? value.trim() : "";
+    fillModelSelectOptions(selectEl, presets, next);
+    if (inputEl && document.activeElement !== inputEl) {
+      inputEl.value = next;
+    }
+    return next;
+  }
+
+  function bindModelChoicePair(selectEl, inputEl, presets, onChange) {
+    if (!selectEl && !inputEl) return () => {};
+    const emit = () => {
+      const value = resolveModelChoice(selectEl, inputEl);
+      if (typeof onChange === "function") onChange(value);
+    };
+    if (selectEl) {
+      selectEl.addEventListener("change", () => {
+        const selected = selectEl.value;
+        if (selected === CUSTOM_MODEL_OPTION) {
+          if (inputEl) {
+            inputEl.focus();
+            inputEl.select?.();
+          }
+        } else if (inputEl) {
+          inputEl.value = selected;
+        }
+        emit();
+      });
+    }
+    if (inputEl) {
+      const handleInput = () => {
+        const typed = inputEl.value.trim();
+        if (selectEl) {
+          fillModelSelectOptions(selectEl, presets, typed);
+        }
+        emit();
+      };
+      inputEl.addEventListener("input", handleInput);
+      inputEl.addEventListener("change", handleInput);
+    }
+    return emit;
   }
 
   function setFieldValue(el, value) {
@@ -2123,6 +2235,8 @@
     const providerChannelChips = $("providerChannelChips");
     const svgModelPresets = $("svgModelPresets");
     const imageModelPresets = $("imageModelPresets");
+    const profileSvgModelSelect = $("profileSvgModelSelect");
+    const profileImageModelSelect = $("profileImageModelSelect");
     let importing = false;
     let importingRmbg = false;
     let loadingStatus = false;
@@ -2274,10 +2388,28 @@
         ? provider === "openai_response" ? "openai" : provider
         : imageProvider;
       const nextImageDefault = defaultImageModels[effectiveImageProvider] || defaultImageModels.custom;
-      if (!svgModel.value.trim() || svgModel.value.trim() === previousSvgDefault) svgModel.value = nextSvgDefault;
-      if (!imageModel.value.trim() || imageModel.value.trim() === previousImageDefault) imageModel.value = nextImageDefault;
+      // Keep multimodal/SVG and image models independent. Only auto-fill when the
+      // field is empty or still holds the previous provider's suggested default.
+      if (!svgModel.value.trim() || svgModel.value.trim() === previousSvgDefault) {
+        svgModel.value = nextSvgDefault;
+      }
+      if (!imageModel.value.trim() || imageModel.value.trim() === previousImageDefault) {
+        imageModel.value = nextImageDefault;
+      }
       svgModel.dataset.suggestedDefault = nextSvgDefault;
       imageModel.dataset.suggestedDefault = nextImageDefault;
+      syncModelChoiceControls(
+        profileSvgModelSelect,
+        svgModel,
+        svgModel.value.trim(),
+        SVG_MODEL_PRESETS
+      );
+      syncModelChoiceControls(
+        profileImageModelSelect,
+        imageModel,
+        imageModel.value.trim(),
+        IMAGE_MODEL_PRESETS
+      );
     };
 
     const openProfileForm = (profile = null) => {
@@ -2287,9 +2419,28 @@
       $("profileId").value = profile?.id || "";
       $("profileName").value = profile?.name || "";
       profileProvider.value = profile?.provider || "bianxie";
-      $("profileSvgModel").value = profile?.svgModel || "";
-      profileImageProvider.value = profile?.imageProvider || "same";
-      $("profileImageModel").value = profile?.imageModel || "";
+      const initialSvgModel =
+        (profile?.svgModel && String(profile.svgModel).trim()) ||
+        defaultSvgModels[profile?.provider || "bianxie"] ||
+        defaultSvgModels.custom;
+      const initialImageProvider = profile?.imageProvider || "same";
+      const initialEffectiveImageProvider =
+        initialImageProvider === "same"
+          ? (profile?.provider || "bianxie") === "openai_response"
+            ? "openai"
+            : profile?.provider || "bianxie"
+          : initialImageProvider;
+      const initialImageModel =
+        (profile?.imageModel && String(profile.imageModel).trim()) ||
+        defaultImageModels[initialEffectiveImageProvider] ||
+        defaultImageModels.custom;
+      $("profileSvgModel").value = initialSvgModel;
+      profileImageProvider.value = initialImageProvider;
+      $("profileImageModel").value = initialImageModel;
+      $("profileSvgModel").dataset.suggestedDefault =
+        defaultSvgModels[profile?.provider || "bianxie"] || defaultSvgModels.custom;
+      $("profileImageModel").dataset.suggestedDefault =
+        defaultImageModels[initialEffectiveImageProvider] || defaultImageModels.custom;
       $("profileBaseUrl").value = profile?.baseUrl || "";
       $("profileImageBaseUrl").value = profile?.imageBaseUrl || "";
       $("profileApiKey").value = "";
@@ -2325,23 +2476,50 @@
       });
     }
 
-    // Bind SVG Model Presets
+    // Bind SVG Model Presets (multimodal only — never touch image model)
     if (svgModelPresets) {
       svgModelPresets.addEventListener("click", (event) => {
         const chip = event.target.closest(".preset-chip");
         if (!chip || !chip.dataset.model) return;
-        $("profileSvgModel").value = chip.dataset.model;
+        const svgModel = $("profileSvgModel");
+        if (!svgModel) return;
+        svgModel.value = chip.dataset.model;
+        syncModelChoiceControls(
+          profileSvgModelSelect,
+          svgModel,
+          chip.dataset.model,
+          SVG_MODEL_PRESETS
+        );
       });
     }
 
-    // Bind Image Model Presets
+    // Bind Image Model Presets (image only — never touch SVG/multimodal model)
     if (imageModelPresets) {
       imageModelPresets.addEventListener("click", (event) => {
         const chip = event.target.closest(".preset-chip");
         if (!chip || !chip.dataset.imgModel) return;
-        $("profileImageModel").value = chip.dataset.imgModel;
+        const imageModel = $("profileImageModel");
+        if (!imageModel) return;
+        imageModel.value = chip.dataset.imgModel;
+        syncModelChoiceControls(
+          profileImageModelSelect,
+          imageModel,
+          chip.dataset.imgModel,
+          IMAGE_MODEL_PRESETS
+        );
       });
     }
+
+    bindModelChoicePair(
+      profileSvgModelSelect,
+      $("profileSvgModel"),
+      SVG_MODEL_PRESETS
+    );
+    bindModelChoicePair(
+      profileImageModelSelect,
+      $("profileImageModel"),
+      IMAGE_MODEL_PRESETS
+    );
 
     // Bind Password Visibility Toggles
     document.querySelectorAll(".input-password-toggle").forEach((btn) => {
@@ -2567,13 +2745,25 @@
       const saveButton = $("saveProviderProfileBtn");
       saveButton.disabled = true;
       try {
+        const svgModelValue = resolveModelChoice(
+          profileSvgModelSelect,
+          $("profileSvgModel"),
+          defaultSvgModels[profileProvider.value] || defaultSvgModels.custom
+        );
+        const imageModelValue =
+          resolveModelChoice(
+            profileImageModelSelect,
+            $("profileImageModel"),
+            ""
+          ) || null;
+        // Persist multimodal/SVG and image models as independent fields.
         const store = await saveProviderProfile({
           id: $("profileId").value || null,
           name: $("profileName").value.trim(),
           provider: profileProvider.value,
-          svgModel: $("profileSvgModel").value.trim(),
+          svgModel: svgModelValue,
           imageProvider: profileImageProvider.value,
-          imageModel: $("profileImageModel").value.trim() || null,
+          imageModel: imageModelValue,
           baseUrl: $("profileBaseUrl").value.trim() || null,
           imageBaseUrl: $("profileImageBaseUrl").value.trim() || null,
           apiKey: $("profileApiKey").value.trim() || null,
@@ -3027,6 +3217,7 @@
     const regenerateSvgBtn = $("regenerateSvgBtn");
     const svgRerunControls = $("svgRerunControls");
     const canvasMultimodalImageScale = $("canvasMultimodalImageScale");
+    const canvasSvgModelSelect = $("canvasSvgModelSelect");
     const canvasSvgModel = $("canvasSvgModel");
     const logPanel = $("logPanel");
     const logBody = $("logBody");
@@ -3144,11 +3335,21 @@
       if (canvasMultimodalImageScale) {
         canvasMultimodalImageScale.value = normalizeMultimodalImageScale(preferredMultimodalScale);
       }
-      if (canvasSvgModel) {
-        canvasSvgModel.title = t("canvas.svg_rerun_model_title");
-        canvasSvgModel.placeholder = preferredSvgModel || getDefaultSvgModelForProvider("bianxie");
-        if (preferredSvgModel) canvasSvgModel.value = preferredSvgModel;
+      const canvasModelTitle = t("canvas.svg_rerun_model_title");
+      if (canvasSvgModelSelect) {
+        canvasSvgModelSelect.title = canvasModelTitle;
       }
+      if (canvasSvgModel) {
+        canvasSvgModel.title = canvasModelTitle;
+        canvasSvgModel.placeholder =
+          currentLocale === "zh" ? "或手填模型 ID" : "or type model id";
+      }
+      syncModelChoiceControls(
+        canvasSvgModelSelect,
+        canvasSvgModel,
+        preferredSvgModel || getDefaultSvgModelForProvider("bianxie"),
+        SVG_MODEL_PRESETS
+      );
 
       // Pipeline overlay chrome (lookup by id so this can run before element consts)
       setText("pipelineEyebrow", t("canvas.pipeline.eyebrow"));
@@ -3763,14 +3964,14 @@
         );
       });
     }
-    if (canvasSvgModel) {
-      const rememberSvgModel = () => {
-        const value = canvasSvgModel.value.trim();
+    bindModelChoicePair(
+      canvasSvgModelSelect,
+      canvasSvgModel,
+      SVG_MODEL_PRESETS,
+      (value) => {
         if (value) preferredSvgModel = value;
-      };
-      canvasSvgModel.addEventListener("change", rememberSvgModel);
-      canvasSvgModel.addEventListener("input", rememberSvgModel);
-    }
+      }
+    );
 
     // Settings/profile prefill must not block live EventSource attachment.
     // Fresh jobs only have run.log, and a slow /api/history call previously left
@@ -3790,9 +3991,6 @@
           }
           if (item?.settings?.svg_model) {
             preferredSvgModel = String(item.settings.svg_model).trim();
-            if (canvasSvgModel && preferredSvgModel) {
-              canvasSvgModel.value = preferredSvgModel;
-            }
           }
         }
       } catch (_err) {
@@ -3803,21 +4001,21 @@
         try {
           const profile = await getActiveProviderProfile();
           const provider = profile?.provider || "bianxie";
+          // Canvas SVG rebuild only uses the multimodal/SVG model. Never fall
+          // back to the image/draw model from the same profile.
           preferredSvgModel =
             (profile?.svgModel && String(profile.svgModel).trim()) ||
             getDefaultSvgModelForProvider(provider);
-          if (canvasSvgModel && preferredSvgModel) {
-            canvasSvgModel.value = preferredSvgModel;
-            canvasSvgModel.placeholder = preferredSvgModel;
-          }
         } catch (_err) {
           preferredSvgModel = getDefaultSvgModelForProvider("bianxie");
-          if (canvasSvgModel) {
-            canvasSvgModel.value = preferredSvgModel;
-            canvasSvgModel.placeholder = preferredSvgModel;
-          }
         }
       }
+      syncModelChoiceControls(
+        canvasSvgModelSelect,
+        canvasSvgModel,
+        preferredSvgModel,
+        SVG_MODEL_PRESETS
+      );
       updateSvgRerunControls();
     };
 
@@ -4083,12 +4281,24 @@
         canvasMultimodalImageScale.disabled = busy;
         canvasMultimodalImageScale.value = normalizeMultimodalImageScale(preferredMultimodalScale);
       }
+      if (canvasSvgModelSelect) {
+        canvasSvgModelSelect.disabled = busy;
+      }
       if (canvasSvgModel) {
         canvasSvgModel.disabled = busy;
-        // Don't clobber in-progress typing while the field is focused.
-        if (preferredSvgModel && document.activeElement !== canvasSvgModel) {
-          canvasSvgModel.value = preferredSvgModel;
-        }
+      }
+      // Keep select + custom input in sync, but never overwrite focused typing.
+      if (
+        preferredSvgModel &&
+        document.activeElement !== canvasSvgModel &&
+        document.activeElement !== canvasSvgModelSelect
+      ) {
+        syncModelChoiceControls(
+          canvasSvgModelSelect,
+          canvasSvgModel,
+          preferredSvgModel,
+          SVG_MODEL_PRESETS
+        );
       }
     }
 
@@ -4173,12 +4383,15 @@
         );
         preferredMultimodalScale = scale;
         const provider = profile.provider || "custom";
+        // Multimodal SVG rebuild model only. Image/draw model stays untouched.
         const selectedSvgModel =
-          (canvasSvgModel?.value || "").trim() ||
-          preferredSvgModel ||
-          profile.svgModel ||
-          getDefaultSvgModelForProvider(provider) ||
-          null;
+          resolveModelChoice(
+            canvasSvgModelSelect,
+            canvasSvgModel,
+            preferredSvgModel ||
+              profile.svgModel ||
+              getDefaultSvgModelForProvider(provider)
+          ) || null;
         if (selectedSvgModel) preferredSvgModel = selectedSvgModel;
         const payload = {
           resume_job_id: jobId,
@@ -4238,9 +4451,12 @@
         }
         if (item?.settings?.svg_model) {
           preferredSvgModel = String(item.settings.svg_model).trim();
-          if (canvasSvgModel && preferredSvgModel) {
-            canvasSvgModel.value = preferredSvgModel;
-          }
+          syncModelChoiceControls(
+            canvasSvgModelSelect,
+            canvasSvgModel,
+            preferredSvgModel,
+            SVG_MODEL_PRESETS
+          );
         }
         const historicalArtifacts = Array.isArray(item.artifacts) ? item.artifacts : [];
         // run.log alone is written as soon as /api/run starts. That is not a
