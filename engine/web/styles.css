@@ -1360,8 +1360,11 @@ body[data-page="canvas"] .canvas-page-shell {
 body[data-page="canvas"] .topbar,
 body[data-page="canvas"] .canvas-topbar {
   align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
   margin-bottom: 0;
-  padding: 8px 14px;
+  padding: 6px 12px;
+  min-height: 48px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.94);
@@ -1370,24 +1373,79 @@ body[data-page="canvas"] .canvas-topbar {
   flex-shrink: 0;
 }
 
+body[data-page="canvas"] .canvas-topbar .brand {
+  font-size: 18px;
+  gap: 8px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+body[data-page="canvas"] .canvas-topbar .brand-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+body[data-page="canvas"] .canvas-topbar-actions {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+body[data-page="canvas"] .canvas-topbar-actions > .ghost,
+body[data-page="canvas"] .canvas-topbar-actions > .history-action,
+body[data-page="canvas"] .canvas-topbar-actions > .pipeline-toggle-btn,
+body[data-page="canvas"] .canvas-topbar-actions > .lang-switch {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+
+body[data-page="canvas"] .canvas-topbar-actions > .lang-switch {
+  padding: 2px;
+  min-height: 0;
+}
+
+body[data-page="canvas"] .canvas-topbar .job-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 148px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
 .canvas-topbar-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .canvas-status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: var(--radius-pill);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
   white-space: nowrap;
+  min-height: 30px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .canvas-status-dot {
@@ -1771,9 +1829,9 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
   .step-rail {
     position: fixed;
     left: 10px;
-    top: 84px;
+    top: 68px;
     z-index: 30;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 100px);
     overflow: auto;
   }
 
@@ -1788,8 +1846,37 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
     box-shadow: var(--shadow-popover);
   }
 
+  body[data-page="canvas"] .topbar,
+  body[data-page="canvas"] .canvas-topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    min-height: 0;
+  }
+
+  body[data-page="canvas"] .canvas-topbar-actions {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 6px;
+  }
+
   body[data-page="canvas"] .canvas-topbar-actions .svg-rerun-controls {
     order: 20;
+    flex: 1 1 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  body[data-page="canvas"] .svg-rerun-select,
+  body[data-page="canvas"] .svg-rerun-model {
+    flex: 0 1 140px;
+    min-width: 110px;
+    max-width: 180px;
+  }
+
+  .step-rail {
+    top: 104px;
+    max-height: calc(100vh - 130px);
   }
 }
 
@@ -1864,15 +1951,17 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
 .svg-rerun-controls {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 3px 6px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel);
   position: relative;
   z-index: 5;
-  max-width: min(100%, 720px);
-  flex-wrap: wrap;
+  max-width: min(100%, 640px);
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .svg-rerun-controls[hidden] {
@@ -1880,31 +1969,41 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
 }
 
 .svg-rerun-label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--muted);
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .svg-rerun-select {
   width: auto;
-  min-width: 128px;
-  height: 32px;
-  padding: 4px 10px;
+  min-width: 0;
+  flex: 1 1 104px;
+  max-width: 148px;
+  height: 28px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
 }
 
 .svg-rerun-model {
-  min-width: 168px;
-  max-width: 240px;
+  flex: 1 1 120px;
+  max-width: 168px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .svg-rerun-model-custom {
-  min-width: 150px;
-  max-width: 220px;
+  flex: 1 1 96px;
+  max-width: 140px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body[data-page="canvas"] .svg-rerun-controls #regenerateSvgBtn {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+  flex: 0 0 auto;
 }
 
 #regenerateSvgBtn {
@@ -1952,10 +2051,76 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
   line-height: 1.5;
 }
 
+/* Progressive collapse: drop secondary chrome, then move SVG controls to their own row. */
+@media (max-width: 1480px) {
+  body[data-page="canvas"] .svg-rerun-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1320px) {
+  body[data-page="canvas"] .canvas-topbar .job-pill {
+    display: none;
+  }
+
+  .svg-rerun-model-custom {
+    display: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  body[data-page="canvas"] .canvas-status-chip {
+    display: none;
+  }
+
+  body[data-page="canvas"] .pipeline-toggle-btn {
+    max-width: 210px;
+    overflow: hidden;
+  }
+
+  body[data-page="canvas"] .pipeline-toggle-btn > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 1100px) {
-  .svg-rerun-controls {
+  body[data-page="canvas"] .topbar,
+  body[data-page="canvas"] .canvas-topbar {
+    align-items: flex-start;
     flex-wrap: wrap;
-    border-radius: 12px;
+    row-gap: 6px;
+    min-height: 0;
+    height: auto;
+  }
+
+  body[data-page="canvas"] .canvas-topbar-left {
+    min-height: 30px;
+    align-items: center;
+  }
+
+  body[data-page="canvas"] .canvas-topbar-actions {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
+    row-gap: 6px;
+  }
+
+  body[data-page="canvas"] .svg-rerun-controls {
+    order: 20;
+    flex: 1 1 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    border-radius: 999px;
+  }
+
+  body[data-page="canvas"] .svg-rerun-select,
+  body[data-page="canvas"] .svg-rerun-model {
+    flex: 0 1 150px;
+    min-width: 120px;
+    max-width: 200px;
   }
 }
 
@@ -2526,6 +2691,24 @@ body[data-page="canvas"] .canvas-main > .fab {
     flex-direction: column;
     align-items: flex-start;
     gap: 14px;
+  }
+
+  body[data-page="canvas"] .topbar,
+  body[data-page="canvas"] .canvas-topbar {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    min-height: 44px;
+  }
+
+  body[data-page="canvas"] .canvas-topbar-actions {
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  body[data-page="canvas"] .canvas-status-chip {
+    display: none;
   }
 
   .topbar-actions {
