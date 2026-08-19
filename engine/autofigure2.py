@@ -1492,6 +1492,17 @@ def prepare_imported_figure(
     with Image.open(input_figure_path) as imported:
         img = ImageOps.exif_transpose(imported).copy()
 
+    # Normalize to RGB early so local SAM3 (3-channel Normalize) never sees RGBA.
+    if img.mode != "RGB":
+        print(f"导入图片模式: {img.mode} -> 转换为 RGB")
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            background = Image.new("RGB", rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        else:
+            img = img.convert("RGB")
+
     original_size = img.size
     if enable_upscale:
         img, upscaled = _upscale_image_to_4k_if_needed(img)
@@ -2142,7 +2153,20 @@ def segment_with_sam3(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # SAM3 / torchvision Normalize 只接受 3 通道；导入 PNG 常为 RGBA，
+    # 直接 set_image 会在 mean/std 归一化时报:
+    # RuntimeError: The size of tensor a (4) must match the size of tensor b (3)
     image = Image.open(image_path)
+    if image.mode != "RGB":
+        print(f"输入图片模式: {image.mode} -> 转换为 RGB")
+        # 透明区域铺白底，避免直接丢 alpha 后发黑/花屏
+        if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+            rgba = image.convert("RGBA")
+            background = Image.new("RGB", rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            image = background
+        else:
+            image = image.convert("RGB")
     original_size = image.size
     print(f"原图尺寸: {original_size[0]} x {original_size[1]}")
 
