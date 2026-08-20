@@ -88,6 +88,7 @@ import re
 import shutil
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Literal
 
@@ -195,6 +196,40 @@ DEFAULT_MAX_MERGED_AREA_RATIO = 0.25
 # 实测启用该门槛会让嵌套子部件无法归并、框数从 14 涨到 69。
 # 仅当某张图确实需要保留面板内的子图标时才调高。
 DEFAULT_CONTAINMENT_SIZE_RATIO = 0.0
+
+# ---------------------------------------------------------------------------
+# RMBG 实心填充保护
+# ---------------------------------------------------------------------------
+# RMBG-2.0 是显著性抠像模型，输入应是"主体 + 可丢弃背景"。但 box 合并常把整块
+# 带色底的面板（如实心砖红底 + 白字的"融合算子"卡片）当成一个图标喂进来，此时
+# 模型会判定底色是背景并抠掉，白色前景落在白画布上等于内容被静默擦除。
+#
+# 判据：被判为背景的像素里，有多大比例"明显不是白色"。实测一次真实运行的 14 张
+# 图标，坏掉的那张为 98.8%，其余 13 张 ≤ 8.3%，中间有 12 倍余量，因此阈值取
+# 0.5 极其安全。
+# 距离纯白多远才算"非白"（RGB 欧氏距离，0-441）。
+RMBG_FILL_GUARD_WHITE_DISTANCE = 40.0
+# 被抠掉区域中非白像素占比达到该值即认为抠错，退回未抠背景的原始 crop。
+RMBG_FILL_GUARD_NONWHITE_RATIO = 0.5
+# 被判为背景的像素少于该比例时不做判断（几乎没抠掉东西，无从误判）。
+RMBG_FILL_GUARD_MIN_REMOVED_RATIO = 0.02
+# 设 FIGONE_RMBG_FILL_GUARD=0 可整体关闭该保护，退回旧行为。
+RMBG_FILL_GUARD_ENABLED = (
+    os.environ.get("FIGONE_RMBG_FILL_GUARD", "1").strip() != "0"
+)
+
+# ---------------------------------------------------------------------------
+# 图标回填的长宽比策略
+# ---------------------------------------------------------------------------
+# 贴片默认用 preserveAspectRatio="xMidYMid meet"，即等比缩放后居中，于是当 LLM
+# 画的占位矩形与 crop 长宽比不一致时，贴片会小于框并留出上下（或左右）空白——
+# 表现为彩色边框内侧多一圈缝。LLM 紧跟占位符还会画一个同坐标的边框叠层，所以
+# 这圈缝非常显眼。
+#
+# 对策：错配轻微时改用 "none" 让贴片精确填满框（边框与内容重合）；错配严重时
+# 保留 meet，宁可留缝也不要把图形拉变形。实测一次真实运行：13/14 张错配
+# ≤ 15.2%，唯一离群的 AF04 达 40.1%（LLM 把 292x409 的竖框画成了正方形）。
+ICON_FILL_MAX_ANISOTROPY = 0.18
 
 # SAM3 API config
 SAM3_FAL_API_URL = "https://fal.run/fal-ai/sam-3/image"
@@ -2839,7 +2874,37 @@ class BriaRMBG2Remover:
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ])
 
-    def remove_background(self, image: Image.Image, output_name: str) -> str:
+    def _fill_guard_verdict(
+        self, image_rgb: Image.Image, mask: Image.Image
+    ) -> tuple[bool, str]:
+        """
+        判断这次抠图是否把实心底色当背景抠掉了
+
+        见 RMBG_FILL_GUARD_* 常量的说明。判据本体在 _fill_guard_verdict_arrays()，
+        与 diagnose_icon_pair() 共用同一套阈值。返回 (是否应放弃抠图, 诊断文本)。
+        """
+        rgb = np.asarray(image_rgb, dtype=np.float32)
+        alpha = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
+        triggered, diagnosis, _, _ = _fill_guard_verdict_arrays(rgb, alpha)
+        return triggered, diagnosis
+
+    def remove_background(
+        self,
+        image: Image.Image,
+        output_name: str,
+        *,
+        disable_fill_guard: bool = False,
+    ) -> dict:
+        """
+        对单张 crop 去背景，写出 `{output_name}_nobg.png`。
+
+        返回结构化结果，供步骤三审图 / 单张重抠复用：
+        {
+          nobg_path, fill_guard_triggered, diagnosis, mode,
+          alpha_coverage, removed_ratio
+        }
+        mode: "matted" | "original_fallback"
+        """
         image_rgb = image.convert("RGB")
         input_tensor = self.transform_image(image_rgb).unsqueeze(0).to(self.device)
 
@@ -2850,12 +2915,558 @@ class BriaRMBG2Remover:
         pred_pil = transforms.ToPILImage()(pred)
         mask = pred_pil.resize(image_rgb.size)
 
-        out = image_rgb.copy()
-        out.putalpha(mask)
-
         out_path = self.output_dir / f"{output_name}_nobg.png"
-        out.save(out_path)
-        return str(out_path)
+        matte_path = self.output_dir / f"{output_name}_matte.png"
+        alpha_arr = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
+        alpha_coverage = float((alpha_arr > 0.5).mean()) if alpha_arr.size else 0.0
+        removed_ratio = float((alpha_arr <= 0.5).mean()) if alpha_arr.size else 0.0
+
+        # 始终侧存一份模型抠图结果：nobg.png 会被"用原裁切"覆盖，matte.png 不会，
+        # 用户才能在两种选择之间来回切换。见 _icon_matte_path()。
+        matted = image_rgb.copy()
+        matted.putalpha(mask)
+        matted.save(matte_path)
+
+        guard_enabled = RMBG_FILL_GUARD_ENABLED and not disable_fill_guard
+        if guard_enabled:
+            should_skip, diagnosis = self._fill_guard_verdict(image_rgb, mask)
+            if should_skip:
+                # 退回原始 crop（整幅不透明）。宁可多留一块底色让用户在审图台
+                # 看见并自行处理，也不要静默擦掉内容。
+                fallback = image_rgb.convert("RGBA")
+                fallback.save(out_path)
+                print(
+                    f"    实心填充保护触发（{diagnosis}）：判定底色被误当背景，"
+                    "保留原图不抠背景"
+                )
+                return {
+                    "nobg_path": str(out_path),
+                    "matte_path": str(matte_path),
+                    "fill_guard_triggered": True,
+                    "diagnosis": diagnosis,
+                    "mode": "original_fallback",
+                    "alpha_coverage": 1.0,
+                    "removed_ratio": 0.0,
+                    "matte_alpha_coverage": alpha_coverage,
+                    "choice": "original",
+                }
+
+        matted.save(out_path)
+        _, diagnosis = self._fill_guard_verdict(image_rgb, mask)
+        return {
+            "nobg_path": str(out_path),
+            "matte_path": str(matte_path),
+            "fill_guard_triggered": False,
+            "diagnosis": diagnosis,
+            "mode": "matted",
+            "alpha_coverage": alpha_coverage,
+            "removed_ratio": removed_ratio,
+            "matte_alpha_coverage": alpha_coverage,
+            "choice": "matted",
+        }
+
+
+def _fill_guard_verdict_arrays(
+    rgb: "np.ndarray", alpha: "np.ndarray"
+) -> tuple[bool, str, float, float]:
+    """
+    实心填充保护的判据本体（纯数组运算，不依赖模型）。
+
+    抽成模块级函数是为了让两条路径共用同一套阈值：
+      1. 抠图当场判定（BriaRMBG2Remover._fill_guard_verdict）
+      2. 对已有 crop + nobg 事后体检（diagnose_icon_pair），用于老任务重建审图台
+
+    返回 (是否应放弃抠图, 诊断文本, 保留覆盖率, 抠掉比例)。
+    """
+    removed = alpha <= 0.5
+    total = removed.size
+    if total == 0:
+        return False, "空图", 0.0, 0.0
+
+    removed_ratio = float(removed.sum()) / total
+    coverage = float((alpha > 0.5).mean())
+    if removed_ratio < RMBG_FILL_GUARD_MIN_REMOVED_RATIO:
+        return False, f"抠掉 {removed_ratio:.1%}，过少不判定", coverage, removed_ratio
+
+    # 被抠掉的像素离纯白有多远
+    distance = np.linalg.norm(rgb - 255.0, axis=2)
+    nonwhite_ratio = float(
+        (distance[removed] > RMBG_FILL_GUARD_WHITE_DISTANCE).mean()
+    )
+    diagnosis = f"抠掉 {removed_ratio:.1%}，其中非白 {nonwhite_ratio:.1%}"
+    triggered = nonwhite_ratio >= RMBG_FILL_GUARD_NONWHITE_RATIO
+    return triggered, diagnosis, coverage, removed_ratio
+
+
+def diagnose_icon_pair(crop_path: str | Path, nobg_path: str | Path) -> dict | None:
+    """
+    对盘上已有的 crop + nobg 做事后体检，不加载 RMBG 模型。
+
+    老任务（本保护上线前跑的）没有 icon_review.json，重建骨架时若不补诊断，
+    审图台就看不出哪张被抠坏了——而这正是人工确认最需要的信息。
+    """
+    try:
+        with Image.open(crop_path) as crop_img:
+            rgb = np.asarray(crop_img.convert("RGB"), dtype=np.float32)
+        with Image.open(nobg_path) as nobg_img:
+            if nobg_img.mode in ("RGBA", "LA"):
+                alpha = np.asarray(nobg_img.getchannel("A"), dtype=np.float32) / 255.0
+            else:
+                alpha = np.ones(rgb.shape[:2], dtype=np.float32)
+    except Exception:
+        return None
+
+    if alpha.shape != rgb.shape[:2]:
+        return None
+
+    triggered, diagnosis, coverage, removed_ratio = _fill_guard_verdict_arrays(rgb, alpha)
+    return {
+        "fill_guard_triggered": triggered,
+        "diagnosis": diagnosis,
+        "alpha_coverage": coverage,
+        "removed_ratio": removed_ratio,
+    }
+
+
+ICON_REVIEW_FILENAME = "icon_review.json"
+
+
+def _icon_review_path(output_dir: str | Path) -> Path:
+    return Path(output_dir) / ICON_REVIEW_FILENAME
+
+
+def _icon_matte_path(icons_dir: Path, label_clean: str) -> Path:
+    """
+    模型抠图结果的侧存副本。
+
+    `icon_X_nobg.png` 是"当前生效的贴片"，选 original 时会被不透明原裁切覆盖；
+    若不另存一份，用户就无法再切回抠图版（实测切回后覆盖率仍为 1.0，而 review
+    里却记成 matted，状态与文件不一致）。因此模型输出始终额外写入 `_matte.png`，
+    该文件只由重抠覆盖，不受选择切换影响。
+    """
+    return icons_dir / f"icon_{label_clean}_matte.png"
+
+
+def _normalize_label_clean(label: str) -> str:
+    text = str(label or "").strip()
+    text = text.replace("<", "").replace(">", "")
+    if text.upper().startswith("AF") and text[2:].isdigit():
+        return f"AF{int(text[2:]):02d}"
+    if text.isdigit():
+        return f"AF{int(text):02d}"
+    return text
+
+
+def _alpha_coverage_of_png(path: str | Path) -> float | None:
+    try:
+        with Image.open(path) as img:
+            if img.mode in ("RGBA", "LA"):
+                alpha = np.asarray(img.getchannel("A"), dtype=np.float32) / 255.0
+            elif "transparency" in img.info:
+                alpha = np.asarray(img.convert("RGBA").getchannel("A"), dtype=np.float32) / 255.0
+            else:
+                return 1.0
+        if alpha.size == 0:
+            return 0.0
+        return float((alpha > 0.5).mean())
+    except Exception:
+        return None
+
+
+def build_icon_review_payload(
+    icon_infos: list[dict],
+    *,
+    notes: str | None = None,
+) -> dict:
+    """Assemble the on-disk icon review manifest used by the canvas gate."""
+    icons = []
+    for info in icon_infos:
+        label_clean = _normalize_label_clean(
+            info.get("label_clean") or info.get("label") or ""
+        )
+        choice = info.get("choice") or (
+            "original" if info.get("fill_guard_triggered") else "matted"
+        )
+        status = info.get("status")
+        if not status:
+            if info.get("fill_guard_triggered"):
+                status = "guarded"
+            elif choice == "original":
+                status = "original"
+            else:
+                status = "ok"
+        icons.append(
+            {
+                "id": info.get("id"),
+                "label": info.get("label") or f"<AF>{label_clean.replace('AF', '')}",
+                "label_clean": label_clean,
+                "x1": info.get("x1"),
+                "y1": info.get("y1"),
+                "x2": info.get("x2"),
+                "y2": info.get("y2"),
+                "width": info.get("width"),
+                "height": info.get("height"),
+                "crop_path": f"icons/icon_{label_clean}.png",
+                "nobg_path": f"icons/icon_{label_clean}_nobg.png",
+                "matte_path": f"icons/icon_{label_clean}_matte.png",
+                "choice": choice if choice in ("matted", "original") else "matted",
+                "fill_guard_triggered": bool(info.get("fill_guard_triggered")),
+                "diagnosis": info.get("diagnosis") or "",
+                "mode": info.get("mode") or ("original_fallback" if info.get("fill_guard_triggered") else "matted"),
+                "alpha_coverage": info.get("alpha_coverage"),
+                "removed_ratio": info.get("removed_ratio"),
+                "status": status,
+                # 抠图当场触发保护时 nobg 已是原裁切，choice 与文件一致；
+                # 老任务事后体检只能给建议（见 server._load_icon_review_for_job）。
+                "recommended_choice": info.get("recommended_choice"),
+                "updated_at": info.get("updated_at"),
+            }
+        )
+    return {
+        "version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "notes": notes or "",
+        "icons": icons,
+    }
+
+
+def write_icon_review(output_dir: str | Path, icon_infos: list[dict], *, notes: str | None = None) -> Path:
+    path = _icon_review_path(output_dir)
+    payload = build_icon_review_payload(icon_infos, notes=notes)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def load_icon_review(output_dir: str | Path) -> dict:
+    path = _icon_review_path(output_dir)
+    if not path.is_file():
+        return {"version": 1, "updated_at": None, "notes": "", "icons": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"version": 1, "updated_at": None, "notes": "", "icons": []}
+    if not isinstance(data, dict):
+        return {"version": 1, "updated_at": None, "notes": "", "icons": []}
+    icons = data.get("icons") if isinstance(data.get("icons"), list) else []
+    return {
+        "version": int(data.get("version") or 1),
+        "updated_at": data.get("updated_at"),
+        "notes": data.get("notes") or "",
+        "icons": icons,
+    }
+
+
+def _apply_icon_choice_files(
+    icons_dir: Path,
+    label_clean: str,
+    choice: str,
+) -> dict:
+    """
+    Materialize the user's choice onto icon_{label}_nobg.png.
+
+    - matted: restore the model matte from the side copy (`_matte.png`)
+    - original: copy opaque crop over nobg so step 5 embeds the uncut patch
+
+    两个方向都必须可逆，否则用户切一次就回不去了。旧任务可能没有 `_matte.png`
+    （该副本是后加的），此时若 nobg 已被覆盖成不透明，就无法凭本地文件恢复，
+    只能要求重抠——这种情况明确报错，而不是假装成功。
+    """
+    label_clean = _normalize_label_clean(label_clean)
+    crop_path = icons_dir / f"icon_{label_clean}.png"
+    nobg_path = icons_dir / f"icon_{label_clean}_nobg.png"
+    matte_path = _icon_matte_path(icons_dir, label_clean)
+    if not _nonempty_file(crop_path):
+        raise FileNotFoundError(f"缺少裁切图: {crop_path.name}")
+
+    if choice == "original":
+        # 覆盖前先补一份 matte 侧存，兼容 `_matte.png` 之前生成的旧任务。
+        if not _nonempty_file(matte_path) and _nonempty_file(nobg_path):
+            shutil.copyfile(nobg_path, matte_path)
+        with Image.open(crop_path) as crop_img:
+            crop_img.convert("RGBA").save(nobg_path)
+        mode = "original_forced"
+    else:
+        if _nonempty_file(matte_path):
+            shutil.copyfile(matte_path, nobg_path)
+        elif not _nonempty_file(nobg_path):
+            raise FileNotFoundError(f"缺少抠图结果: {nobg_path.name}")
+        elif (_alpha_coverage_of_png(nobg_path) or 0.0) >= 0.999:
+            # nobg 已是不透明原图且无侧存可恢复：诚实报错，让上层引导重抠。
+            raise FileNotFoundError(
+                f"{label_clean} 缺少可恢复的抠图副本（{matte_path.name}），"
+                "请对该图标执行「重抠」后再切回抠图版"
+            )
+        mode = "matted"
+    coverage = _alpha_coverage_of_png(nobg_path)
+    return {
+        "label_clean": label_clean,
+        "choice": choice,
+        "mode": mode,
+        "crop_path": str(crop_path),
+        "nobg_path": str(nobg_path),
+        "matte_path": str(matte_path) if _nonempty_file(matte_path) else None,
+        "alpha_coverage": coverage,
+    }
+
+
+def apply_icon_choices(
+    output_dir: str | Path,
+    choices: dict[str, str],
+) -> dict:
+    """
+    Apply per-icon choices (matted|original) and persist icon_review.json.
+
+    choices keys accept AF01 / <AF>01 / 1.
+    """
+    output_dir = Path(output_dir)
+    icons_dir = output_dir / "icons"
+    review = load_icon_review(output_dir)
+    by_label = {
+        _normalize_label_clean(item.get("label_clean") or item.get("label") or ""): dict(item)
+        for item in review.get("icons") or []
+        if item
+    }
+
+    # If review missing, rebuild skeleton from boxlib + icons.
+    if not by_label and _nonempty_file(output_dir / "boxlib.json"):
+        try:
+            infos = load_icon_infos_from_output_dir(output_dir, output_dir / "boxlib.json")
+            for info in infos:
+                label_clean = _normalize_label_clean(info["label_clean"])
+                by_label[label_clean] = {
+                    "id": info.get("id"),
+                    "label": info.get("label"),
+                    "label_clean": label_clean,
+                    "x1": info.get("x1"),
+                    "y1": info.get("y1"),
+                    "x2": info.get("x2"),
+                    "y2": info.get("y2"),
+                    "width": info.get("width"),
+                    "height": info.get("height"),
+                    "choice": "matted",
+                    "fill_guard_triggered": False,
+                    "diagnosis": "",
+                    "mode": "matted",
+                    "alpha_coverage": _alpha_coverage_of_png(info.get("nobg_path")),
+                    "status": "ok",
+                }
+        except Exception:
+            pass
+
+    updated = []
+    now = datetime.now().isoformat(timespec="seconds")
+    for raw_label, raw_choice in (choices or {}).items():
+        label_clean = _normalize_label_clean(raw_label)
+        choice = str(raw_choice or "").strip().lower()
+        if choice in ("crop", "raw", "source"):
+            choice = "original"
+        if choice not in ("matted", "original"):
+            raise ValueError(f"无效 choice={raw_choice!r}（仅支持 matted / original）")
+        result = _apply_icon_choice_files(icons_dir, label_clean, choice)
+        item = by_label.get(label_clean) or {
+            "label": f"<AF>{label_clean[2:]}" if label_clean.startswith("AF") else label_clean,
+            "label_clean": label_clean,
+        }
+        item.update(
+            {
+                "label_clean": label_clean,
+                "choice": choice,
+                "mode": result["mode"],
+                "alpha_coverage": result.get("alpha_coverage"),
+                "status": "original" if choice == "original" else item.get("status") or "ok",
+                "updated_at": now,
+                "crop_path": f"icons/icon_{label_clean}.png",
+                "nobg_path": f"icons/icon_{label_clean}_nobg.png",
+            }
+        )
+        if choice == "original":
+            item["fill_guard_triggered"] = bool(item.get("fill_guard_triggered"))
+        by_label[label_clean] = item
+        updated.append(label_clean)
+
+    icons = sorted(by_label.values(), key=lambda x: (x.get("id") is None, x.get("id") or 0, x.get("label_clean") or ""))
+    path = write_icon_review(output_dir, icons)
+    return {"review_path": str(path), "updated": updated, "review": load_icon_review(output_dir)}
+
+
+def rematte_icons(
+    output_dir: str | Path,
+    labels: list[str] | None = None,
+    *,
+    rmbg_model_path: Optional[str] = None,
+    disable_fill_guard: bool = False,
+    prefer_original: bool = False,
+) -> dict:
+    """
+    Re-run RMBG for selected icons (or all) using existing crops / boxlib.
+
+    prefer_original=True: skip model and force nobg = opaque crop.
+    """
+    output_dir = Path(output_dir)
+    figure_path = output_dir / "figure.png"
+    boxlib_path = output_dir / "boxlib.json"
+    icons_dir = output_dir / "icons"
+    icons_dir.mkdir(parents=True, exist_ok=True)
+
+    if not _nonempty_file(boxlib_path):
+        raise FileNotFoundError("缺少 boxlib.json，无法重抠")
+    if not _nonempty_file(figure_path):
+        raise FileNotFoundError("缺少 figure.png，无法重抠")
+
+    with open(boxlib_path, "r", encoding="utf-8") as f:
+        boxes = (json.load(f) or {}).get("boxes") or []
+    if not boxes:
+        raise ValueError("boxlib.json 中没有可重抠的 box")
+
+    wanted: set[str] | None = None
+    if labels:
+        wanted = {_normalize_label_clean(x) for x in labels if str(x).strip()}
+        if not wanted:
+            wanted = None
+
+    review = load_icon_review(output_dir)
+    by_label = {
+        _normalize_label_clean(item.get("label_clean") or item.get("label") or ""): dict(item)
+        for item in review.get("icons") or []
+        if item
+    }
+
+    image = Image.open(figure_path)
+    remover = None
+    if not prefer_original:
+        resolved_rmbg = _resolve_rmbg_model_path(rmbg_model_path)
+        _ensure_rmbg2_access_ready(resolved_rmbg or rmbg_model_path)
+        remover = BriaRMBG2Remover(
+            model_path=resolved_rmbg or rmbg_model_path,
+            output_dir=icons_dir,
+        )
+
+    updated: list[str] = []
+    now = datetime.now().isoformat(timespec="seconds")
+    try:
+        for box_info in boxes:
+            box_id = box_info.get("id")
+            label = box_info.get("label", f"<AF>{int(box_id or 0) + 1:02d}")
+            label_clean = _normalize_label_clean(label)
+            if wanted is not None and label_clean not in wanted:
+                continue
+
+            x1, y1, x2, y2 = (
+                box_info["x1"],
+                box_info["y1"],
+                box_info["x2"],
+                box_info["y2"],
+            )
+            clamped = _clamp_box_to_image(x1, y1, x2, y2, image.width, image.height)
+            if clamped is None:
+                print(f"  {label}: 跳过（box 越界或为空）")
+                continue
+            x1, y1, x2, y2 = clamped
+
+            crop_path = icons_dir / f"icon_{label_clean}.png"
+            if _nonempty_file(crop_path):
+                cropped = Image.open(crop_path)
+            else:
+                cropped = image.crop((x1, y1, x2, y2))
+                cropped.save(crop_path)
+
+            item = by_label.get(label_clean) or {
+                "id": box_id,
+                "label": label,
+                "label_clean": label_clean,
+            }
+            item.update(
+                {
+                    "id": box_id,
+                    "label": label,
+                    "label_clean": label_clean,
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "width": x2 - x1,
+                    "height": y2 - y1,
+                    "crop_path": f"icons/icon_{label_clean}.png",
+                    "nobg_path": f"icons/icon_{label_clean}_nobg.png",
+                    "updated_at": now,
+                }
+            )
+
+            if prefer_original:
+                nobg_path = icons_dir / f"icon_{label_clean}_nobg.png"
+                matte_path = _icon_matte_path(icons_dir, label_clean)
+                # 与 _apply_icon_choice_files 一致：覆盖前保住抠图副本，否则
+                # 「全部用原裁切」会让所有图标再也切不回抠图版。
+                if not _nonempty_file(matte_path) and _nonempty_file(nobg_path):
+                    shutil.copyfile(nobg_path, matte_path)
+                with Image.open(crop_path) as crop_img:
+                    crop_img.convert("RGBA").save(nobg_path)
+                item.update(
+                    {
+                        "choice": "original",
+                        "mode": "original_forced",
+                        "fill_guard_triggered": False,
+                        "diagnosis": "用户强制使用原裁切",
+                        "alpha_coverage": 1.0,
+                        "removed_ratio": 0.0,
+                        "status": "original",
+                    }
+                )
+                print(f"  {label}: 已改为使用原裁切")
+            else:
+                assert remover is not None
+                result = remover.remove_background(
+                    cropped,
+                    f"icon_{label_clean}",
+                    disable_fill_guard=disable_fill_guard,
+                )
+                item.update(
+                    {
+                        "choice": result.get("choice") or "matted",
+                        "mode": result.get("mode"),
+                        "fill_guard_triggered": bool(result.get("fill_guard_triggered")),
+                        "diagnosis": result.get("diagnosis") or "",
+                        "alpha_coverage": result.get("alpha_coverage"),
+                        "removed_ratio": result.get("removed_ratio"),
+                        "status": (
+                            "guarded"
+                            if result.get("fill_guard_triggered")
+                            else "ok"
+                        ),
+                    }
+                )
+                print(
+                    f"  {label}: 重抠完成 mode={item['mode']}"
+                    + (f" ({item['diagnosis']})" if item.get("diagnosis") else "")
+                )
+
+            by_label[label_clean] = item
+            updated.append(label_clean)
+    finally:
+        if remover is not None:
+            del remover
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        try:
+            image.close()
+        except Exception:
+            pass
+
+    if wanted is not None:
+        missing = sorted(wanted - set(updated))
+        if missing:
+            raise FileNotFoundError("以下标签未找到对应 box/crop: " + ", ".join(missing))
+
+    icons = sorted(
+        by_label.values(),
+        key=lambda x: (x.get("id") is None, x.get("id") or 0, x.get("label_clean") or ""),
+    )
+    path = write_icon_review(output_dir, icons)
+    return {
+        "review_path": str(path),
+        "updated": updated,
+        "review": load_icon_review(output_dir),
+    }
 
 
 def crop_and_remove_background(
@@ -2868,6 +3479,7 @@ def crop_and_remove_background(
     根据 boxlib.json 裁切图片并使用 RMBG2 去背景
 
     文件命名使用 label: icon_AF01.png, icon_AF01_nobg.png
+    同时写出 icon_review.json，供画布步骤三人工确认。
     """
     print("\n" + "=" * 60)
     print("步骤三：裁切 + RMBG2 去背景")
@@ -2885,6 +3497,7 @@ def crop_and_remove_background(
 
     if len(boxes) == 0:
         print("警告: 没有检测到有效的 box")
+        write_icon_review(output_dir, [], notes="no boxes")
         return []
 
     remover = BriaRMBG2Remover(model_path=rmbg_model_path, output_dir=icons_dir)
@@ -2912,7 +3525,8 @@ def crop_and_remove_background(
         crop_path = icons_dir / f"icon_{label_clean}.png"
         cropped.save(crop_path)
 
-        nobg_path = remover.remove_background(cropped, f"icon_{label_clean}")
+        result = remover.remove_background(cropped, f"icon_{label_clean}")
+        nobg_path = result["nobg_path"]
 
         icon_infos.append({
             "id": box_id,
@@ -2922,6 +3536,13 @@ def crop_and_remove_background(
             "width": x2 - x1, "height": y2 - y1,
             "crop_path": str(crop_path),
             "nobg_path": nobg_path,
+            "fill_guard_triggered": bool(result.get("fill_guard_triggered")),
+            "diagnosis": result.get("diagnosis") or "",
+            "mode": result.get("mode") or "matted",
+            "alpha_coverage": result.get("alpha_coverage"),
+            "removed_ratio": result.get("removed_ratio"),
+            "choice": result.get("choice") or "matted",
+            "status": "guarded" if result.get("fill_guard_triggered") else "ok",
         })
 
         print(f"  {label}: 裁切并去背景完成 -> {nobg_path}")
@@ -2929,6 +3550,10 @@ def crop_and_remove_background(
     del remover
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+    review_path = write_icon_review(output_dir, icon_infos)
+    print(f"图标审图清单: {review_path}")
+    print("步骤三完成。默认在此暂停，等待用户在画布确认抠图后再继续步骤 4/5。")
 
     return icon_infos
 
@@ -3320,6 +3945,63 @@ def calculate_scale_factors(
 # 步骤五：图标替换到 SVG（支持序号匹配）
 # ============================================================================
 
+def _icon_preserve_aspect_ratio(
+    icon_width: float,
+    icon_height: float,
+    rect_width: float,
+    rect_height: float,
+    *,
+    label: str = "",
+) -> str:
+    """
+    为一次贴片选择 preserveAspectRatio
+
+    见 ICON_FILL_MAX_ANISOTROPY 的说明：轻微错配用 "none" 精确填满 LLM 画的框，
+    严重错配保留 "meet" 以免把图形拉变形。
+    """
+    meet = "xMidYMid meet"
+    if min(icon_width, icon_height, rect_width, rect_height) <= 0:
+        return meet
+
+    icon_ar = icon_width / icon_height
+    rect_ar = rect_width / rect_height
+    anisotropy = max(icon_ar, rect_ar) / min(icon_ar, rect_ar) - 1.0
+
+    if anisotropy <= ICON_FILL_MAX_ANISOTROPY:
+        return "none"
+
+    print(
+        f"  {label}: 长宽比错配 {anisotropy:.1%} 超过 "
+        f"{ICON_FILL_MAX_ANISOTROPY:.0%}，保留等比缩放（框内会留空白）"
+    )
+    return meet
+
+
+def _icon_image_tag(
+    label_clean: str,
+    icon_b64: str,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    *,
+    icon_size: Optional[tuple[int, int]] = None,
+    label: str = "",
+) -> str:
+    """构造回填用的 <image> 标签，并按长宽比错配决定填充方式"""
+    if icon_size:
+        par = _icon_preserve_aspect_ratio(
+            icon_size[0], icon_size[1], width, height, label=label or label_clean
+        )
+    else:
+        par = "xMidYMid meet"
+    return (
+        f'<image id="icon_{label_clean}" x="{x:.1f}" y="{y:.1f}" '
+        f'width="{width:.1f}" height="{height:.1f}" '
+        f'href="data:image/png;base64,{icon_b64}" preserveAspectRatio="{par}"/>'
+    )
+
+
 def replace_icons_in_svg(
     template_svg_path: str,
     icon_infos: list[dict],
@@ -3356,6 +4038,7 @@ def replace_icons_in_svg(
 
         # 读取图标并转为 base64
         icon_img = Image.open(nobg_path)
+        icon_native_size = icon_img.size
         buf = io.BytesIO()
         icon_img.save(buf, format="PNG")
         icon_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -3420,7 +4103,10 @@ def replace_icons_in_svg(
                         print(f"  {label}: 检测到 <g> transform: translate({translate_x}, {translate_y})")
 
                     # 创建 image 标签替换整个 <g>
-                    image_tag = f'<image id="icon_{label_clean}" x="{x}" y="{y}" width="{width}" height="{height}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+                    image_tag = _icon_image_tag(
+                        label_clean, icon_b64, x, y, width, height,
+                        icon_size=icon_native_size, label=label,
+                    )
                     svg_content = svg_content.replace(g_content, image_tag)
                     print(f"  {label}: 替换成功 (序号匹配 <g>) at ({x}, {y}) size {width}x{height}")
                     replaced = True
@@ -3459,7 +4145,10 @@ def replace_icons_in_svg(
                                 height = float(h_match.group(1))
 
                                 # 替换 rect 和 text
-                                image_tag = f'<image id="icon_{label_clean}" x="{x}" y="{y}" width="{width}" height="{height}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+                                image_tag = _icon_image_tag(
+                                    label_clean, icon_b64, x, y, width, height,
+                                    icon_size=icon_native_size, label=label,
+                                )
 
                                 # 删除 text
                                 svg_content = svg_content.replace(text_match.group(0), '')
@@ -3480,7 +4169,10 @@ def replace_icons_in_svg(
             width = orig_width * scale_x
             height = orig_height * scale_y
 
-            image_tag = f'<image id="icon_{label_clean}" x="{x1:.1f}" y="{y1:.1f}" width="{width:.1f}" height="{height:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+            image_tag = _icon_image_tag(
+                label_clean, icon_b64, x1, y1, width, height,
+                icon_size=icon_native_size, label=label,
+            )
 
             x1_int, y1_int = int(round(x1)), int(round(y1))
 
@@ -3517,7 +4209,10 @@ def replace_icons_in_svg(
             width = orig_width * scale_x
             height = orig_height * scale_y
 
-            image_tag = f'<image id="icon_{label_clean}" x="{x1:.1f}" y="{y1:.1f}" width="{width:.1f}" height="{height:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+            image_tag = _icon_image_tag(
+                label_clean, icon_b64, x1, y1, width, height,
+                icon_size=icon_native_size, label=label,
+            )
             svg_content = svg_content.replace('</svg>', f'  {image_tag}\n</svg>')
             print(f"  {label}: 追加到 SVG at ({x1:.1f}, {y1:.1f}) (未找到匹配的占位符)")
 

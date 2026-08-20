@@ -62,6 +62,7 @@
 
           <button class="ghost" id="backToConfigBtn" type="button">Back to Config</button>
           <button class="ghost primary" id="resumeJobBtn" type="button" hidden>Continue from checkpoint</button>
+          <button class="ghost primary" id="iconReviewToggleBtn" type="button" hidden>Review icons</button>
           <a class="ghost topbar-link history-action" id="canvasHistoryBtn" href="/history.html">History</a>
           <button class="ghost" id="logToggle" type="button">Logs</button>
           <div class="lang-switch" data-lang-switch>
@@ -212,6 +213,36 @@
                   <span>Open canvas</span>
                 </button>
               </div>
+            </div>
+          </section>
+
+          <section class="icon-review-overlay" id="iconReviewOverlay" hidden>
+            <div class="icon-review-card">
+              <header class="icon-review-header">
+                <div>
+                  <div class="eyebrow" id="iconReviewEyebrow">ICON MATTING REVIEW</div>
+                  <h2 class="icon-review-title" id="iconReviewTitle">Review cutouts before SVG rebuild</h2>
+                  <p class="icon-review-subtitle" id="iconReviewSubtitle">
+                    Compare each crop with its transparent cutout. Fix weak results, then continue.
+                  </p>
+                </div>
+                <div class="icon-review-header-meta">
+                  <span class="status-badge is-neutral" id="iconReviewBadge">Review</span>
+                  <span class="icon-review-count" id="iconReviewCount">0 icons</span>
+                </div>
+              </header>
+
+              <div class="icon-review-toolbar">
+                <button type="button" class="ghost" id="iconReviewRefreshBtn">Refresh</button>
+                <button type="button" class="ghost" id="iconReviewAllMattedBtn">All use cutout</button>
+                <button type="button" class="ghost" id="iconReviewAllOriginalBtn">All use crop</button>
+                <button type="button" class="ghost" id="iconReviewRematteAllBtn">Rematte all</button>
+                <button type="button" class="ghost primary" id="iconReviewApproveBtn">Approve &amp; continue SVG</button>
+                <button type="button" class="ghost" id="iconReviewCloseBtn">Hide panel</button>
+              </div>
+
+              <div class="icon-review-status" id="iconReviewStatus" hidden></div>
+              <div class="icon-review-grid" id="iconReviewGrid"></div>
             </div>
           </section>
         </section>

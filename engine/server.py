@@ -273,15 +273,38 @@ class RunRequest(BaseModel):
     optimize_iterations: Optional[int] = None
     multimodal_image_scale: Optional[float] = None
     start_from: Optional[int] = None
+    # 默认在步骤 3（抠图）后暂停，等用户在画布确认再继续 4/5。
+    # 传 5 可恢复旧的一键跑完全程行为。
+    stop_after: Optional[int] = None
     reference_image_path: Optional[str] = None
     input_figure_path: Optional[str] = None
     resume_job_id: Optional[str] = None
 
 
+class IconChoiceItem(BaseModel):
+    label: str
+    choice: str  # matted | original
+
+
+class IconChoicesRequest(BaseModel):
+    choices: list[IconChoiceItem] = Field(default_factory=list)
+
+
+class IconRematteRequest(BaseModel):
+    labels: list[str] = Field(default_factory=list)
+    # True: 强制把 nobg 写成不透明原裁切（不跑模型）
+    prefer_original: bool = False
+    # True: 重抠时关闭实心填充保护，强制使用模型 alpha
+    disable_fill_guard: bool = False
+
+
 JOB_SETTINGS_FILENAME = "figone_job_settings.json"
 LEGACY_JOB_SETTINGS_FILENAME = "figra_job_settings.json"
+ICON_REVIEW_FILENAME = "icon_review.json"
 MULTIMODAL_IMAGE_SCALE_CHOICES = (1.0, 0.75, 0.5, 0.4, 0.25)
 DEFAULT_MULTIMODAL_IMAGE_SCALE = 0.5
+# 新任务默认跑到步骤 3 后停下，进入抠图人工确认门。
+DEFAULT_STOP_AFTER = 3
 SVG_RERUN_START_FROM = 4
 SVG_ARCHIVE_NAMES = (
     "template.svg",
@@ -318,6 +341,7 @@ HISTORY_ARTIFACT_ORDER = [
     "optimized_template.svg",
     "final.svg",
     "boxlib.json",
+    ICON_REVIEW_FILENAME,
     "run.log",
 ]
 HISTORY_THUMBNAIL_KINDS = {
@@ -397,6 +421,7 @@ def _write_job_settings(output_dir: Path, settings: dict) -> None:
         "max_detection_area_ratio": settings.get("max_detection_area_ratio"),
         "optimize_iterations": settings.get("optimize_iterations"),
         "multimodal_image_scale": settings.get("multimodal_image_scale"),
+        "stop_after": settings.get("stop_after"),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
     # Drop empty values so older consumers stay simple.
@@ -574,7 +599,19 @@ def run_job(req: RunRequest) -> JSONResponse:
     start_from = req.start_from
     if start_from is not None and start_from not in (1, 2, 3, 4, 5):
         raise HTTPException(status_code=400, detail="start_from must be an integer from 1 to 5")
+    if req.stop_after is not None and req.stop_after not in (1, 2, 3, 4, 5):
+        raise HTTPException(status_code=400, detail="stop_after must be an integer from 1 to 5")
     svg_only_rerun = bool(resume_job_id and start_from == SVG_RERUN_START_FROM)
+    # 从步骤 4/5 续跑（含 SVG 重跑、审图后继续）默认跑完全程；新任务默认停在步骤 3。
+    if req.stop_after is not None:
+        stop_after = int(req.stop_after)
+    elif start_from is not None and start_from >= 4:
+        stop_after = 5
+    elif resume_job_id and start_from is None:
+        # 裸 resume：接着未完成步骤往下跑，但仍在步骤 3 门控（若还没过）
+        stop_after = 5
+    else:
+        stop_after = DEFAULT_STOP_AFTER
 
     if resume_job_id:
         if method_text or input_figure_path:
@@ -749,6 +786,7 @@ def run_job(req: RunRequest) -> JSONResponse:
         cmd += ["--sam_max_masks", str(sam_max_masks)]
     cmd += ["--optimize_iterations", str(optimize_iterations)]
     cmd += ["--multimodal_image_scale", str(multimodal_image_scale)]
+    cmd += ["--stop_after", str(stop_after)]
 
     rmbg_model = _configured_rmbg_model_path()
     if rmbg_model is not None:
@@ -784,27 +822,24 @@ def run_job(req: RunRequest) -> JSONResponse:
             "max_detection_area_ratio": max_detection_area_ratio,
             "optimize_iterations": optimize_iterations,
             "multimodal_image_scale": multimodal_image_scale,
+            "stop_after": stop_after,
         },
     )
 
     log_path = output_dir / "run.log"
     meta_line = f"[meta] python={PYTHON_EXECUTABLE}\n[meta] cmd={_redact_cmd_args(cmd)}\n"
+    meta_extra = (
+        f"[meta] multimodal_image_scale={multimodal_image_scale:g} "
+        f"optimize_iterations={optimize_iterations} stop_after={stop_after}\n"
+    )
     if resume_job_id and log_path.is_file():
         with open(log_path, "a", encoding="utf-8") as handle:
             label = "svg_rerun" if svg_only_rerun else "resume"
             handle.write(f"\n[meta] {label} at {datetime.now().isoformat()}\n")
             handle.write(meta_line)
-            handle.write(
-                f"[meta] multimodal_image_scale={multimodal_image_scale:g} "
-                f"optimize_iterations={optimize_iterations}\n"
-            )
+            handle.write(meta_extra)
     else:
-        log_path.write_text(
-            meta_line
-            + f"[meta] multimodal_image_scale={multimodal_image_scale:g} "
-            + f"optimize_iterations={optimize_iterations}\n",
-            encoding="utf-8",
-        )
+        log_path.write_text(meta_line + meta_extra, encoding="utf-8")
 
     process = subprocess.Popen(
         cmd,
@@ -833,9 +868,216 @@ def run_job(req: RunRequest) -> JSONResponse:
             "job_id": job_id,
             "multimodal_image_scale": multimodal_image_scale,
             "start_from": start_from,
+            "stop_after": stop_after,
             "svg_only_rerun": svg_only_rerun,
+            "awaiting_icon_review": bool(stop_after == 3 and not svg_only_rerun),
         }
     )
+
+
+def _job_output_dir(job_id: str) -> Path:
+    if not _is_safe_job_id(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    job = JOBS.get(job_id)
+    output_dir = job.output_dir if job else _resolve_output_dir(job_id)
+    if not output_dir:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return output_dir
+
+
+def _assert_job_idle(job_id: str) -> None:
+    existing = JOBS.get(job_id)
+    if existing is not None and not existing.done:
+        raise HTTPException(status_code=409, detail="Job is still running")
+
+
+def _icon_public_urls(job_id: str, label_clean: str) -> dict:
+    crop_rel = f"icons/icon_{label_clean}.png"
+    nobg_rel = f"icons/icon_{label_clean}_nobg.png"
+    matte_rel = f"icons/icon_{label_clean}_matte.png"
+    return {
+        "crop_url": f"/api/artifacts/{job_id}/{crop_rel}",
+        "nobg_url": f"/api/artifacts/{job_id}/{nobg_rel}",
+        "matte_url": f"/api/artifacts/{job_id}/{matte_rel}",
+        "crop_path": crop_rel,
+        "nobg_path": nobg_rel,
+        "matte_path": matte_rel,
+    }
+
+
+def _enrich_icon_review(job_id: str, output_dir: Path, review: dict) -> dict:
+    """Attach public artifact URLs and gate status for the canvas review UI."""
+    icons_out = []
+    for item in review.get("icons") or []:
+        if not isinstance(item, dict):
+            continue
+        label_clean = str(item.get("label_clean") or "").replace("<", "").replace(">", "")
+        if not label_clean:
+            continue
+        urls = _icon_public_urls(job_id, label_clean)
+        crop_path = output_dir / urls["crop_path"]
+        nobg_path = output_dir / urls["nobg_path"]
+        matte_path = output_dir / urls["matte_path"]
+        row = dict(item)
+        row.update(urls)
+        row["has_crop"] = _nonempty_file(crop_path)
+        row["has_nobg"] = _nonempty_file(nobg_path)
+        # UI 用它判断「切回抠图版」是否可行：旧任务若已被覆盖且无侧存，
+        # 该操作必然失败，应提示先重抠而不是让用户点出一个 404。
+        row["has_matte"] = _nonempty_file(matte_path)
+        row["can_restore_matte"] = bool(
+            row["has_matte"] or (item.get("choice") or "matted") == "matted"
+        )
+        icons_out.append(row)
+
+    has_icons = bool(icons_out)
+    has_final = _nonempty_file(output_dir / "final.svg")
+    has_template = _nonempty_file(output_dir / "template.svg")
+    # 步骤 3 完成且还没进入 SVG：进入人工确认门
+    awaiting = bool(
+        has_icons
+        and _nonempty_file(output_dir / "figure.png")
+        and _nonempty_file(output_dir / "samed.png")
+        and _nonempty_file(output_dir / "boxlib.json")
+        and not has_template
+        and not has_final
+    )
+    guarded = sum(1 for icon in icons_out if icon.get("fill_guard_triggered") or icon.get("status") == "guarded")
+    return {
+        "job_id": job_id,
+        "version": review.get("version") or 1,
+        "updated_at": review.get("updated_at"),
+        "notes": review.get("notes") or "",
+        "icons": icons_out,
+        "icon_count": len(icons_out),
+        "guarded_count": guarded,
+        "awaiting_review": awaiting,
+        "has_final_svg": has_final,
+        "has_template_svg": has_template,
+    }
+
+
+def _load_icon_review_for_job(job_id: str, output_dir: Path) -> dict:
+    """Load icon_review.json, rebuilding a skeleton from boxlib/icons if needed."""
+    # Lazy import keeps server startup light when autofigure deps are heavy.
+    from autofigure2 import (
+        diagnose_icon_pair,
+        load_icon_infos_from_output_dir,
+        load_icon_review,
+        write_icon_review,
+    )
+
+    review = load_icon_review(output_dir)
+    if review.get("icons"):
+        return _enrich_icon_review(job_id, output_dir, review)
+
+    boxlib_path = output_dir / "boxlib.json"
+    if not _nonempty_file(boxlib_path):
+        return _enrich_icon_review(job_id, output_dir, review)
+
+    try:
+        infos = load_icon_infos_from_output_dir(output_dir, boxlib_path)
+    except Exception:
+        infos = []
+    if infos:
+        # 老任务没有 icon_review.json。只重建坐标骨架的话，审图台上「抠掉多少 /
+        # 是否被抠坏」全是空的，而这正是人工确认最需要的信息。crop 与 nobg 都在
+        # 盘上，可以不加载模型直接体检补齐。
+        for info in infos:
+            verdict = diagnose_icon_pair(info.get("crop_path"), info.get("nobg_path"))
+            if verdict:
+                info.update(verdict)
+                if verdict.get("fill_guard_triggered"):
+                    # 只给"建议"，不改 choice。步骤 5 是无条件读 nobg.png 的
+                    # （不看 choice），若这里预设 original 却没真的换文件，UI 会
+                    # 显示"用原裁切"而实际嵌入的仍是被抠坏的图。GET 接口也不该
+                    # 改写产物，所以由用户在审图台显式点一下再落盘。
+                    info["status"] = "guarded"
+                    info["recommended_choice"] = "original"
+                    # 必须显式钉住：build_icon_review_payload 在 choice 缺省时会
+                    # 按 fill_guard_triggered 推成 "original"（那对抠图当场触发
+                    # 保护的路径是对的，因为那时 nobg 已被换成原裁切），这里文件
+                    # 仍是抠坏的 matte，必须如实标 matted。
+                    info["choice"] = "matted"
+        write_icon_review(output_dir, infos, notes="rebuilt from icons/")
+        review = load_icon_review(output_dir)
+    return _enrich_icon_review(job_id, output_dir, review)
+
+
+@app.get("/api/jobs/{job_id}/icons")
+def get_job_icons(job_id: str) -> JSONResponse:
+    """Return per-icon matting pairs for the step-3 review gate."""
+    output_dir = _job_output_dir(job_id)
+    payload = _load_icon_review_for_job(job_id, output_dir)
+    return JSONResponse(payload)
+
+
+@app.post("/api/jobs/{job_id}/icons/choices")
+def post_job_icon_choices(job_id: str, req: IconChoicesRequest) -> JSONResponse:
+    """Apply matted/original choices onto nobg files before continuing to SVG."""
+    _assert_job_idle(job_id)
+    output_dir = _job_output_dir(job_id)
+    if not req.choices:
+        raise HTTPException(status_code=400, detail="choices must not be empty")
+
+    from autofigure2 import apply_icon_choices
+
+    mapping: dict[str, str] = {}
+    for item in req.choices:
+        label = (item.label or "").strip()
+        choice = (item.choice or "").strip().lower()
+        if not label:
+            raise HTTPException(status_code=400, detail="choice.label is required")
+        if choice in ("crop", "raw", "source"):
+            choice = "original"
+        if choice not in ("matted", "original"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid choice for {label!r}: use matted or original",
+            )
+        mapping[label] = choice
+
+    try:
+        result = apply_icon_choices(output_dir, mapping)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to apply icon choices: {exc}") from exc
+
+    payload = _load_icon_review_for_job(job_id, output_dir)
+    payload["updated"] = result.get("updated") or []
+    return JSONResponse(payload)
+
+
+@app.post("/api/jobs/{job_id}/icons/rematte")
+def post_job_icon_rematte(job_id: str, req: IconRematteRequest) -> JSONResponse:
+    """Re-run RMBG (or force original) for selected icons."""
+    _assert_job_idle(job_id)
+    output_dir = _job_output_dir(job_id)
+
+    from autofigure2 import rematte_icons
+
+    rmbg_model = _configured_rmbg_model_path()
+    try:
+        result = rematte_icons(
+            output_dir,
+            labels=list(req.labels or []),
+            rmbg_model_path=str(rmbg_model) if rmbg_model else None,
+            disable_fill_guard=bool(req.disable_fill_guard),
+            prefer_original=bool(req.prefer_original),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Rematte failed: {exc}") from exc
+
+    payload = _load_icon_review_for_job(job_id, output_dir)
+    payload["updated"] = result.get("updated") or []
+    return JSONResponse(payload)
 
 
 @app.post("/api/upload")
@@ -1136,6 +1378,7 @@ def _scan_artifacts(job: Job) -> None:
         output_dir / "template.svg",
         output_dir / "optimized_template.svg",
         output_dir / "final.svg",
+        output_dir / ICON_REVIEW_FILENAME,
     ]
 
     icons_dir = output_dir / "icons"
@@ -1160,6 +1403,10 @@ def _classify_artifact(rel_path: str) -> str:
         return "samed"
     if rel_path.endswith("_nobg.png"):
         return "icon_nobg"
+    # `_matte.png` 是抠图结果的侧存副本（供审图台来回切换用），不是独立产物；
+    # 归到 icon_raw 会让产物区多出一整套重复卡片。
+    if rel_path.endswith("_matte.png"):
+        return "icon_matte"
     if rel_path.startswith("icons/") and rel_path.endswith(".png"):
         return "icon_raw"
     if rel_path == "template.svg":
@@ -1170,6 +1417,8 @@ def _classify_artifact(rel_path: str) -> str:
         return "final_svg"
     if rel_path == "boxlib.json":
         return "boxlib"
+    if rel_path == ICON_REVIEW_FILENAME:
+        return "icon_review"
     if rel_path == "run.log":
         return "log"
     return "artifact"

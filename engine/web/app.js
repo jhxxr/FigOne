@@ -376,6 +376,40 @@
         resume_need_profile: "Add a provider profile with API key before resuming.",
         resume_need_artifacts: "Need figure.png and samed.png before resume.",
         resume_failed: "Failed to resume job",
+        icon_review_toggle: "Review icons",
+        icon_review_eyebrow: "ICON MATTING REVIEW",
+        icon_review_title: "Review cutouts before SVG rebuild",
+        icon_review_subtitle:
+          "Compare each crop with its transparent cutout. Keep, force original, or rematte weak results, then continue to SVG.",
+        icon_review_badge: "Review",
+        icon_review_badge_ready: "Ready",
+        icon_review_count: "{count} icons",
+        icon_review_guarded: "{count} need attention",
+        icon_review_refresh: "Refresh",
+        icon_review_all_matted: "All use cutout",
+        icon_review_all_original: "All use crop",
+        icon_review_rematte_all: "Rematte all",
+        icon_review_approve: "Approve & continue SVG",
+        icon_review_close: "Hide panel",
+        icon_review_crop: "Crop",
+        icon_review_cutout: "Cutout",
+        icon_review_use_matted: "Use cutout",
+        icon_review_use_original: "Use crop",
+        icon_review_rematte: "Rematte",
+        icon_review_rematte_force: "Force model alpha",
+        icon_review_status_ok: "OK",
+        icon_review_status_guarded: "Fill protected",
+        icon_review_status_original: "Using crop",
+        icon_review_status_busy: "Working...",
+        icon_review_loading: "Loading icon review...",
+        icon_review_empty: "No icons to review yet.",
+        icon_review_saved: "Choices saved.",
+        icon_review_rematte_done: "Rematte finished for {count} icon(s).",
+        icon_review_approving: "Saving choices and starting SVG...",
+        icon_review_failed: "Icon review failed",
+        icon_review_gate_title: "Step 3 complete — review cutouts",
+        icon_review_gate_body:
+          "Pipeline paused after icon matting. Approve cutouts to rebuild the SVG, or fix weak icons first.",
         svg_rerun_label: "SVG preview",
         svg_rerun_model_label: "SVG model",
         svg_rerun_model_title:
@@ -416,7 +450,8 @@
           stage_skip_figure: "Step 1 skipped, reusing existing figure",
           stage_sam: "Step 2: Running SAM3 segmentation...",
           stage_rmbg: "Step 3: Cropping icons and removing backgrounds...",
-          stage_icons_ready: "Step 3: Icons ready, preparing multimodal SVG prompt...",
+          stage_icons_ready: "Step 3: Icons ready — waiting for cutout review",
+          stage_icon_review: "Step 3: Review and refine icon cutouts before SVG rebuild",
           stage_svg_build: "Step 4: Multimodal model reconstructing SVG structure...",
           stage_svg_optimize: "Step 4.6: Validating and optimizing SVG layout...",
           stage_svg_align: "Step 4.7: Aligning coordinate systems...",
@@ -754,6 +789,40 @@
         resume_need_profile: "请先在「模型与提供商」配置带 API Key 的配置。",
         resume_need_artifacts: "至少需要 figure.png 与 samed.png 才能续跑。",
         resume_failed: "续跑失败",
+        icon_review_toggle: "审抠图",
+        icon_review_eyebrow: "抠图人工确认",
+        icon_review_title: "确认抠图后再重建 SVG",
+        icon_review_subtitle:
+          "对比每张裁切与透明抠图。保留、改用原裁切，或对效果差的单张重抠，确认后再继续 SVG。",
+        icon_review_badge: "待确认",
+        icon_review_badge_ready: "可继续",
+        icon_review_count: "{count} 张图标",
+        icon_review_guarded: "{count} 张需留意",
+        icon_review_refresh: "刷新",
+        icon_review_all_matted: "全部用抠图",
+        icon_review_all_original: "全部用原裁切",
+        icon_review_rematte_all: "全部重抠",
+        icon_review_approve: "确认并继续 SVG",
+        icon_review_close: "收起面板",
+        icon_review_crop: "原裁切",
+        icon_review_cutout: "抠图",
+        icon_review_use_matted: "用抠图",
+        icon_review_use_original: "用原裁切",
+        icon_review_rematte: "重抠",
+        icon_review_rematte_force: "强制模型 alpha",
+        icon_review_status_ok: "正常",
+        icon_review_status_guarded: "实心保护",
+        icon_review_status_original: "使用原裁切",
+        icon_review_status_busy: "处理中...",
+        icon_review_loading: "正在加载抠图审阅...",
+        icon_review_empty: "暂无可审阅的图标。",
+        icon_review_saved: "选择已保存。",
+        icon_review_rematte_done: "已完成 {count} 张重抠。",
+        icon_review_approving: "正在保存选择并启动 SVG...",
+        icon_review_failed: "抠图审阅失败",
+        icon_review_gate_title: "步骤 3 完成 — 请确认抠图",
+        icon_review_gate_body:
+          "流水线已在抠图后暂停。确认抠图效果后再重建 SVG；效果差的可先单张修正。",
         svg_rerun_label: "SVG 预览比例",
         svg_rerun_model_label: "SVG 模型",
         svg_rerun_model_title:
@@ -794,7 +863,8 @@
           stage_skip_figure: "跳过步骤 1，复用已有学术图片",
           stage_sam: "步骤 2: 正在运行 SAM3 语义分割与占位框检测...",
           stage_rmbg: "步骤 3: 正在裁切图元并调用 RMBG-2.0 透明化去背景...",
-          stage_icons_ready: "步骤 3: 图元处理完成，正在准备多模态 SVG 提示...",
+          stage_icons_ready: "步骤 3: 图元处理完成 — 等待抠图确认",
+          stage_icon_review: "步骤 3: 请审阅并修正抠图，确认后再重建 SVG",
           stage_svg_build: "步骤 4: 多模态模型正在重构矢量 SVG 结构与代码...",
           stage_svg_optimize: "步骤 4.6: 正在对 SVG 矢量代码进行语法验证与布局优化...",
           stage_svg_align: "步骤 4.7: 正在进行坐标系对齐...",
@@ -3214,6 +3284,18 @@
     const logToggle = $("logToggle");
     const backToConfigBtn = $("backToConfigBtn");
     const resumeJobBtn = $("resumeJobBtn");
+    const iconReviewToggleBtn = $("iconReviewToggleBtn");
+    const iconReviewOverlay = $("iconReviewOverlay");
+    const iconReviewGrid = $("iconReviewGrid");
+    const iconReviewStatus = $("iconReviewStatus");
+    const iconReviewBadge = $("iconReviewBadge");
+    const iconReviewCount = $("iconReviewCount");
+    const iconReviewRefreshBtn = $("iconReviewRefreshBtn");
+    const iconReviewAllMattedBtn = $("iconReviewAllMattedBtn");
+    const iconReviewAllOriginalBtn = $("iconReviewAllOriginalBtn");
+    const iconReviewRematteAllBtn = $("iconReviewRematteAllBtn");
+    const iconReviewApproveBtn = $("iconReviewApproveBtn");
+    const iconReviewCloseBtn = $("iconReviewCloseBtn");
     const regenerateSvgBtn = $("regenerateSvgBtn");
     const svgRerunControls = $("svgRerunControls");
     const canvasMultimodalImageScale = $("canvasMultimodalImageScale");
@@ -3234,6 +3316,9 @@
     let preferredSvgModel = "";
     let editorErrorMessage = "";
     let preferredMultimodalScale = DEFAULT_MULTIMODAL_IMAGE_SCALE;
+    let iconReviewState = null;
+    let iconReviewBusy = false;
+    let iconReviewChoices = {};
 
     if (!jobId) {
       statusText.textContent = t("canvas.missing_job");
@@ -3246,6 +3331,9 @@
       if (statusState === "failed") {
         badge.className = "status-badge is-error";
         badge.textContent = t("canvas.pipeline.badge_failed");
+      } else if (statusState === "review") {
+        badge.className = "status-badge is-neutral";
+        badge.textContent = t("canvas.icon_review_badge");
       } else if (statusState === "done") {
         badge.className = "status-badge is-ready";
         badge.textContent = t("canvas.pipeline.badge_done");
@@ -3270,6 +3358,8 @@
             ? "waiting"
             : statusState === "running"
               ? "running"
+              : statusState === "review"
+                ? "history"
               : statusState === "history"
                 ? "history"
                 : statusState === "done"
@@ -3324,6 +3414,21 @@
       if (resumeJobBtn) {
         resumeJobBtn.textContent = t("canvas.resume");
         resumeJobBtn.title = t("canvas.resume_hint");
+      }
+      if (iconReviewToggleBtn) {
+        iconReviewToggleBtn.textContent = t("canvas.icon_review_toggle");
+      }
+      setText("iconReviewEyebrow", t("canvas.icon_review_eyebrow"));
+      setText("iconReviewTitle", t("canvas.icon_review_title"));
+      setText("iconReviewSubtitle", t("canvas.icon_review_subtitle"));
+      if (iconReviewRefreshBtn) iconReviewRefreshBtn.textContent = t("canvas.icon_review_refresh");
+      if (iconReviewAllMattedBtn) iconReviewAllMattedBtn.textContent = t("canvas.icon_review_all_matted");
+      if (iconReviewAllOriginalBtn) iconReviewAllOriginalBtn.textContent = t("canvas.icon_review_all_original");
+      if (iconReviewRematteAllBtn) iconReviewRematteAllBtn.textContent = t("canvas.icon_review_rematte_all");
+      if (iconReviewApproveBtn) iconReviewApproveBtn.textContent = t("canvas.icon_review_approve");
+      if (iconReviewCloseBtn) iconReviewCloseBtn.textContent = t("canvas.icon_review_close");
+      if (iconReviewState) {
+        renderIconReview(iconReviewState);
       }
       if (regenerateSvgBtn) {
         regenerateSvgBtn.textContent = t("canvas.svg_rerun_btn");
@@ -3426,6 +3531,8 @@
         statusText.textContent = t("canvas.waiting");
       } else if (statusState === "running") {
         statusText.textContent = t("canvas.running");
+      } else if (statusState === "review") {
+        statusText.textContent = t("canvas.icon_review_gate_title");
       } else if (statusState === "disconnected") {
         statusText.textContent = t("canvas.disconnected");
       } else if (statusState === "done") {
@@ -3952,6 +4059,62 @@
         void resumeCurrentJob();
       });
     }
+    if (iconReviewToggleBtn) {
+      iconReviewToggleBtn.addEventListener("click", () => {
+        void openIconReview({ force: true });
+      });
+    }
+    if (iconReviewRefreshBtn) {
+      iconReviewRefreshBtn.addEventListener("click", () => {
+        void refreshIconReview();
+      });
+    }
+    if (iconReviewAllMattedBtn) {
+      iconReviewAllMattedBtn.addEventListener("click", () => {
+        setAllIconChoices("matted");
+      });
+    }
+    if (iconReviewAllOriginalBtn) {
+      iconReviewAllOriginalBtn.addEventListener("click", () => {
+        setAllIconChoices("original");
+      });
+    }
+    if (iconReviewRematteAllBtn) {
+      iconReviewRematteAllBtn.addEventListener("click", () => {
+        void rematteIconsRequest([]);
+      });
+    }
+    if (iconReviewApproveBtn) {
+      iconReviewApproveBtn.addEventListener("click", () => {
+        void approveIconReviewAndContinue();
+      });
+    }
+    if (iconReviewCloseBtn) {
+      iconReviewCloseBtn.addEventListener("click", () => {
+        setIconReviewOpen(false);
+      });
+    }
+    if (iconReviewGrid) {
+      iconReviewGrid.addEventListener("click", (event) => {
+        const btn = event.target?.closest?.("[data-icon-action]");
+        if (!btn) return;
+        const label = btn.getAttribute("data-label") || "";
+        const action = btn.getAttribute("data-icon-action") || "";
+        if (!label || !action) return;
+        if (action === "matted" || action === "original") {
+          iconReviewChoices[label] = action;
+          renderIconReview(iconReviewState);
+          return;
+        }
+        if (action === "rematte") {
+          void rematteIconsRequest([label], { disableFillGuard: false });
+          return;
+        }
+        if (action === "rematte_force") {
+          void rematteIconsRequest([label], { disableFillGuard: true });
+        }
+      });
+    }
     if (regenerateSvgBtn) {
       regenerateSvgBtn.addEventListener("click", () => {
         void regenerateSvgOnly();
@@ -4067,6 +4230,11 @@
         }
         updatePipelineProgress(3, 55, t("canvas.pipeline.stage_icons_ready"));
         updateSvgRerunControls();
+        updateIconReviewVisibility();
+      } else if (data.kind === "icon_review") {
+        updatePipelineProgress(3, 58, t("canvas.pipeline.stage_icon_review"));
+        updateIconReviewVisibility();
+        void refreshIconReview({ silent: true });
       } else if (data.kind === "template_svg" || data.kind === "optimized_template_svg") {
         // Template SVG belongs to step 4 (rebuild), not final assembly.
         setStepPreviewEmoji(step4Preview, "📐");
@@ -4088,7 +4256,7 @@
       }
     });
 
-    eventSource.addEventListener("status", (event) => {
+    eventSource.addEventListener("status", async (event) => {
       markLiveStreamActivity();
       const data = JSON.parse(event.data);
       if (data.state === "started") {
@@ -4116,19 +4284,24 @@
           updateResumeButtonVisibility();
           updateSvgRerunControls();
         } else {
-          statusState = "done";
-          statusText.textContent = t("canvas.done");
-          applyPipelineBadge();
-          if (pipelineToggleBtn) pipelineToggleBtn.classList.add("is-done");
-          updatePipelineProgress(5, 100, t("canvas.pipeline.stage_all_done_short"));
-          if (resumeJobBtn) resumeJobBtn.hidden = true;
-          updateSvgRerunControls();
-          // Auto minimize overlay after completion with smooth delay
-          setTimeout(() => {
-            if (pipelineOverlay && statusState === "done") {
-              pipelineOverlay.classList.add("is-hidden");
-            }
-          }, 1500);
+          // Successful stop may be the step-3 review gate, not full completion.
+          const enteredReview = await maybeEnterIconReviewGate();
+          if (!enteredReview) {
+            statusState = "done";
+            statusText.textContent = t("canvas.done");
+            applyPipelineBadge();
+            if (pipelineToggleBtn) pipelineToggleBtn.classList.add("is-done");
+            updatePipelineProgress(5, 100, t("canvas.pipeline.stage_all_done_short"));
+            if (resumeJobBtn) resumeJobBtn.hidden = true;
+            updateSvgRerunControls();
+            updateIconReviewVisibility();
+            // Auto minimize overlay after completion with smooth delay
+            setTimeout(() => {
+              if (pipelineOverlay && statusState === "done") {
+                pipelineOverlay.classList.add("is-hidden");
+              }
+            }, 1500);
+          }
         }
       }
     });
@@ -4244,7 +4417,15 @@
           kind === "icon_raw" &&
           path.includes("icons/") &&
           path.endsWith(".png") &&
-          !path.endsWith("_nobg.png")
+          !path.endsWith("_nobg.png") &&
+          // `_matte.png` 是抠图侧存副本，不作为独立产物展示
+          !path.endsWith("_matte.png")
+        ) {
+          return true;
+        }
+        if (
+          kind === "icon_review" &&
+          (path === "icon_review.json" || path.endsWith("/icon_review.json"))
         ) {
           return true;
         }
@@ -4253,10 +4434,375 @@
     }
 
     function canRegenerateSvg() {
-      if (statusState === "running" || statusState === "waiting") return false;
+      if (statusState === "running" || statusState === "waiting" || statusState === "review") {
+        return false;
+      }
       if (!hasArtifactKind("figure") || !hasArtifactKind("samed")) return false;
       // Icons may be absent in pure no-icon fallback mode; still allow SVG rebuild.
       return true;
+    }
+
+    function cacheBust(url) {
+      if (!url) return url;
+      const join = url.includes("?") ? "&" : "?";
+      return `${url}${join}t=${Date.now()}`;
+    }
+
+    function setIconReviewStatus(message, { isError = false } = {}) {
+      if (!iconReviewStatus) return;
+      if (!message) {
+        iconReviewStatus.hidden = true;
+        iconReviewStatus.textContent = "";
+        iconReviewStatus.classList.remove("is-error");
+        return;
+      }
+      iconReviewStatus.hidden = false;
+      iconReviewStatus.textContent = message;
+      iconReviewStatus.classList.toggle("is-error", Boolean(isError));
+    }
+
+    function setIconReviewOpen(open) {
+      if (!iconReviewOverlay) return;
+      iconReviewOverlay.hidden = !open;
+      if (open && pipelineOverlay) {
+        pipelineOverlay.classList.add("is-hidden");
+      }
+    }
+
+    function isAwaitingIconReview(payload) {
+      if (!payload) return false;
+      if (payload.awaiting_review) return true;
+      // Fallback: icons exist, no SVG yet.
+      return (
+        Number(payload.icon_count || 0) > 0 &&
+        !payload.has_template_svg &&
+        !payload.has_final_svg &&
+        hasArtifactKind("figure") &&
+        hasArtifactKind("samed")
+      );
+    }
+
+    function updateIconReviewVisibility() {
+      const canShow =
+        (hasArtifactKind("icon_nobg") || hasArtifactKind("icon_raw") || hasArtifactKind("icon_review")) &&
+        statusState !== "running" &&
+        statusState !== "waiting";
+      if (iconReviewToggleBtn) {
+        iconReviewToggleBtn.hidden = !canShow;
+      }
+      if (!canShow) {
+        setIconReviewOpen(false);
+      }
+    }
+
+    function syncIconChoicesFromState(payload) {
+      const next = {};
+      for (const icon of payload?.icons || []) {
+        const label = icon.label_clean || icon.label;
+        if (!label) continue;
+        next[label] = icon.choice === "original" ? "original" : "matted";
+      }
+      iconReviewChoices = next;
+    }
+
+    function renderIconReview(payload) {
+      if (!iconReviewGrid) return;
+      iconReviewState = payload || iconReviewState;
+      const icons = iconReviewState?.icons || [];
+      if (iconReviewCount) {
+        const guarded = Number(iconReviewState?.guarded_count || 0);
+        const base = t("canvas.icon_review_count", { count: icons.length });
+        iconReviewCount.textContent =
+          guarded > 0
+            ? `${base} · ${t("canvas.icon_review_guarded", { count: guarded })}`
+            : base;
+      }
+      if (iconReviewBadge) {
+        const awaiting = isAwaitingIconReview(iconReviewState);
+        iconReviewBadge.className = `status-badge ${awaiting ? "is-neutral" : "is-ready"}`;
+        iconReviewBadge.textContent = awaiting
+          ? t("canvas.icon_review_badge")
+          : t("canvas.icon_review_badge_ready");
+      }
+
+      iconReviewGrid.replaceChildren();
+      if (!icons.length) {
+        const empty = document.createElement("div");
+        empty.className = "icon-review-empty";
+        empty.textContent = t("canvas.icon_review_empty");
+        iconReviewGrid.appendChild(empty);
+        return;
+      }
+
+      for (const icon of icons) {
+        const label = icon.label_clean || icon.label || "?";
+        const choice = iconReviewChoices[label] || (icon.choice === "original" ? "original" : "matted");
+        const card = document.createElement("article");
+        card.className = "icon-review-item";
+        if (icon.fill_guard_triggered || icon.status === "guarded") {
+          card.classList.add("is-guarded");
+        }
+        if (choice === "original") card.classList.add("is-original");
+
+        const head = document.createElement("div");
+        head.className = "icon-review-item-head";
+        const title = document.createElement("strong");
+        title.textContent = label;
+        const status = document.createElement("span");
+        status.className = "icon-review-item-status";
+        if (icon.fill_guard_triggered || icon.status === "guarded") {
+          status.textContent = t("canvas.icon_review_status_guarded");
+        } else if (choice === "original") {
+          status.textContent = t("canvas.icon_review_status_original");
+        } else {
+          status.textContent = t("canvas.icon_review_status_ok");
+        }
+        head.append(title, status);
+
+        const pair = document.createElement("div");
+        pair.className = "icon-review-pair";
+
+        const cropBox = document.createElement("figure");
+        cropBox.className = "icon-review-thumb";
+        const cropCap = document.createElement("figcaption");
+        cropCap.textContent = t("canvas.icon_review_crop");
+        const cropImg = document.createElement("img");
+        cropImg.alt = `${label} crop`;
+        cropImg.src = cacheBust(engineUrl(icon.crop_url));
+        cropBox.append(cropCap, cropImg);
+
+        const nobgBox = document.createElement("figure");
+        nobgBox.className = "icon-review-thumb is-checker";
+        const nobgCap = document.createElement("figcaption");
+        nobgCap.textContent = t("canvas.icon_review_cutout");
+        const nobgImg = document.createElement("img");
+        nobgImg.alt = `${label} cutout`;
+        nobgImg.src = cacheBust(engineUrl(icon.nobg_url));
+        nobgBox.append(nobgCap, nobgImg);
+
+        pair.append(cropBox, nobgBox);
+
+        const meta = document.createElement("div");
+        meta.className = "icon-review-meta";
+        const bits = [];
+        if (icon.diagnosis) bits.push(icon.diagnosis);
+        if (icon.alpha_coverage != null && Number.isFinite(Number(icon.alpha_coverage))) {
+          bits.push(`α ${(Number(icon.alpha_coverage) * 100).toFixed(0)}%`);
+        }
+        meta.textContent = bits.join(" · ");
+
+        const actions = document.createElement("div");
+        actions.className = "icon-review-actions";
+        const mkBtn = (action, text, { primary = false, active = false } = {}) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `ghost${primary ? " primary" : ""}${active ? " is-active" : ""}`;
+          b.dataset.iconAction = action;
+          b.dataset.label = label;
+          b.textContent = text;
+          b.disabled = iconReviewBusy;
+          return b;
+        };
+        actions.append(
+          mkBtn("matted", t("canvas.icon_review_use_matted"), {
+            active: choice === "matted",
+            primary: choice === "matted",
+          }),
+          mkBtn("original", t("canvas.icon_review_use_original"), {
+            active: choice === "original",
+            primary: choice === "original",
+          }),
+          mkBtn("rematte", t("canvas.icon_review_rematte")),
+          mkBtn("rematte_force", t("canvas.icon_review_rematte_force"))
+        );
+
+        card.append(head, pair, meta, actions);
+        iconReviewGrid.appendChild(card);
+      }
+
+      const toolbarBusy = iconReviewBusy || statusState === "running" || statusState === "waiting";
+      [
+        iconReviewRefreshBtn,
+        iconReviewAllMattedBtn,
+        iconReviewAllOriginalBtn,
+        iconReviewRematteAllBtn,
+        iconReviewApproveBtn,
+      ].forEach((btn) => {
+        if (btn) btn.disabled = toolbarBusy;
+      });
+    }
+
+    async function refreshIconReview({ silent = false, open = false } = {}) {
+      if (!silent) setIconReviewStatus(t("canvas.icon_review_loading"));
+      try {
+        const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/icons`, {
+          cache: "no-store",
+        });
+        const payload = await readApiJson(response);
+        syncIconChoicesFromState(payload);
+        renderIconReview(payload);
+        if (!silent) setIconReviewStatus("");
+        if (open || isAwaitingIconReview(payload)) {
+          setIconReviewOpen(true);
+        }
+        updateIconReviewVisibility();
+        return payload;
+      } catch (err) {
+        if (!silent) {
+          setIconReviewStatus(`${t("canvas.icon_review_failed")}: ${err?.message || err}`, {
+            isError: true,
+          });
+        }
+        return null;
+      }
+    }
+
+    async function openIconReview({ force = false } = {}) {
+      const payload = await refreshIconReview({ open: true });
+      if (!payload && force) {
+        setIconReviewOpen(true);
+        setIconReviewStatus(t("canvas.icon_review_empty"));
+      }
+    }
+
+    async function maybeEnterIconReviewGate() {
+      // Only treat a successful stop as the review gate when icons exist and SVG does not.
+      if (hasArtifactKind("final_svg") || hasArtifactKind("template_svg")) {
+        return false;
+      }
+      if (!(hasArtifactKind("icon_nobg") || hasArtifactKind("icon_raw") || hasArtifactKind("icon_review"))) {
+        return false;
+      }
+      const payload = await refreshIconReview({ silent: true, open: true });
+      if (!payload || !isAwaitingIconReview(payload)) {
+        return false;
+      }
+      statusState = "review";
+      statusText.textContent = t("canvas.icon_review_gate_title");
+      applyPipelineBadge();
+      updatePipelineProgress(3, 60, t("canvas.pipeline.stage_icon_review"));
+      if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+      setIconReviewOpen(true);
+      setIconReviewStatus(t("canvas.icon_review_gate_body"));
+      if (resumeJobBtn) resumeJobBtn.hidden = true;
+      updateSvgRerunControls();
+      updateIconReviewVisibility();
+      return true;
+    }
+
+    function setAllIconChoices(choice) {
+      const icons = iconReviewState?.icons || [];
+      for (const icon of icons) {
+        const label = icon.label_clean || icon.label;
+        if (label) iconReviewChoices[label] = choice;
+      }
+      renderIconReview(iconReviewState);
+    }
+
+    async function saveIconChoices() {
+      const choices = Object.entries(iconReviewChoices).map(([label, choice]) => ({
+        label,
+        choice,
+      }));
+      if (!choices.length) return iconReviewState;
+      const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/icons/choices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choices }),
+      });
+      const payload = await readApiJson(response);
+      syncIconChoicesFromState(payload);
+      renderIconReview(payload);
+      return payload;
+    }
+
+    async function rematteIconsRequest(labels, { disableFillGuard = false } = {}) {
+      if (iconReviewBusy) return;
+      iconReviewBusy = true;
+      renderIconReview(iconReviewState);
+      setIconReviewStatus(t("canvas.icon_review_status_busy"));
+      try {
+        // Persist current choices first so rematte doesn't surprise the user.
+        await saveIconChoices();
+        const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/icons/rematte`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            labels: labels || [],
+            disable_fill_guard: Boolean(disableFillGuard),
+            prefer_original: false,
+          }),
+        });
+        const payload = await readApiJson(response);
+        syncIconChoicesFromState(payload);
+        renderIconReview(payload);
+        const count = (payload.updated || labels || []).length || payload.icon_count || 0;
+        setIconReviewStatus(t("canvas.icon_review_rematte_done", { count }));
+      } catch (err) {
+        setIconReviewStatus(`${t("canvas.icon_review_failed")}: ${err?.message || err}`, {
+          isError: true,
+        });
+      } finally {
+        iconReviewBusy = false;
+        renderIconReview(iconReviewState);
+      }
+    }
+
+    async function approveIconReviewAndContinue() {
+      if (iconReviewBusy) return;
+      iconReviewBusy = true;
+      renderIconReview(iconReviewState);
+      setIconReviewStatus(t("canvas.icon_review_approving"));
+      try {
+        await saveIconChoices();
+        let profile = null;
+        try {
+          profile = await getActiveProviderProfile();
+        } catch (_err) {
+          profile = null;
+        }
+        if (!profile || !profileHasApiKey(profile)) {
+          throw new Error(t("canvas.resume_need_profile"));
+        }
+        const provider = profile.provider || "custom";
+        const selectedSvgModel =
+          resolveModelChoice(
+            canvasSvgModelSelect,
+            canvasSvgModel,
+            preferredSvgModel || profile.svgModel || getDefaultSvgModelForProvider(provider)
+          ) || null;
+        if (selectedSvgModel) preferredSvgModel = selectedSvgModel;
+        const payload = {
+          resume_job_id: jobId,
+          start_from: 4,
+          stop_after: 5,
+          provider,
+          api_key: profile.apiKey || null,
+          base_url: provider === "custom" ? profile.baseUrl || null : null,
+          svg_model: selectedSvgModel,
+          multimodal_image_scale: Number(
+            normalizeMultimodalImageScale(
+              canvasMultimodalImageScale?.value || preferredMultimodalScale
+            )
+          ),
+        };
+        const response = await engineFetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await readApiJson(response);
+        const nextJob = data.job_id || jobId;
+        const nextSource = source === "history" ? "import" : source || "input";
+        window.location.href =
+          `/canvas.html?job=${encodeURIComponent(nextJob)}&source=${encodeURIComponent(nextSource)}`;
+      } catch (err) {
+        setIconReviewStatus(`${t("canvas.icon_review_failed")}: ${err?.message || err}`, {
+          isError: true,
+        });
+        iconReviewBusy = false;
+        renderIconReview(iconReviewState);
+      }
     }
 
     function updateResumeButtonVisibility() {
@@ -4273,7 +4819,11 @@
       if (!svgRerunControls) return;
       const show = canRegenerateSvg();
       svgRerunControls.hidden = !show;
-      const busy = !show || statusState === "running" || statusState === "waiting";
+      const busy =
+        !show ||
+        statusState === "running" ||
+        statusState === "waiting" ||
+        statusState === "review";
       if (regenerateSvgBtn) {
         regenerateSvgBtn.disabled = busy;
       }
@@ -4515,12 +5065,24 @@
         // snapshots — never leave the UI in the default "running / step 1" state.
         stopPipelineTimer();
         isFinished = true;
-        statusState = "history";
-        statusText.textContent = t("canvas.history_ready");
 
         let historyStep = 1;
         let historyPercent = 0;
         let historyLabel = t("canvas.pipeline.stage_history_ready");
+        const awaitingIconsOnly =
+          !findFirstArtifact(historicalArtifacts, [
+            "final_svg",
+            "optimized_template_svg",
+            "template_svg",
+          ]) &&
+          Boolean(
+            findFirstArtifact(historicalArtifacts, [
+              "icon_nobg",
+              "icon_raw",
+              "icon_review",
+            ])
+          );
+
         if (findFirstArtifact(historicalArtifacts, ["final_svg"])) {
           historyStep = 5;
           historyPercent = 100;
@@ -4534,6 +5096,10 @@
           historyStep = 4;
           historyPercent = 82;
           historyLabel = t("canvas.pipeline.stage_template_ready");
+        } else if (awaitingIconsOnly) {
+          historyStep = 3;
+          historyPercent = 60;
+          historyLabel = t("canvas.pipeline.stage_icon_review");
         } else if (findFirstArtifact(historicalArtifacts, ["icon_nobg", "icon_raw"])) {
           historyStep = 3;
           historyPercent = 55;
@@ -4552,6 +5118,26 @@
         currentStep = 0;
         currentPercentage = 0;
         lastPipelineLabel = historyLabel;
+        // Paused after step 3: open the icon review gate instead of plain history.
+        if (awaitingIconsOnly) {
+          statusState = "review";
+          statusText.textContent = t("canvas.icon_review_gate_title");
+          updatePipelineProgress(historyStep, historyPercent, historyLabel);
+          applyPipelineBadge();
+          if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+          if (sideLiveLog) {
+            sideLiveLog.textContent = t("canvas.icon_review_gate_body");
+            sideLiveLog.dataset.i18nDefault = "0";
+          }
+          updateSvgRerunControls();
+          updateResumeButtonVisibility();
+          updateIconReviewVisibility();
+          void openIconReview({ force: true });
+          return true;
+        }
+
+        statusState = "history";
+        statusText.textContent = t("canvas.history_ready");
         updatePipelineProgress(historyStep, historyPercent, historyLabel);
         applyPipelineBadge();
         if (pipelineOverlay) {
@@ -4564,6 +5150,7 @@
         }
         updateSvgRerunControls();
         updateResumeButtonVisibility();
+        updateIconReviewVisibility();
         return true;
       } catch (_err) {
         if (!silent) {
@@ -4802,6 +5389,8 @@
         return currentLocale === "zh" ? "原始图标" : "icon raw";
       case "icon_nobg":
         return currentLocale === "zh" ? "去背景图标" : "icon no-bg";
+      case "icon_review":
+        return currentLocale === "zh" ? "抠图审阅" : "icon review";
       case "template_svg":
         return currentLocale === "zh" ? "模板 SVG" : "template";
       case "optimized_template_svg":

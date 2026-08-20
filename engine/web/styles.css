@@ -1476,7 +1476,7 @@ body[data-page="canvas"] .canvas-topbar .job-pill {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 340px;
+  grid-template-columns: 72px minmax(0, 1fr) minmax(300px, 360px);
   gap: 10px;
 }
 
@@ -1814,9 +1814,138 @@ body[data-page="canvas"] .canvas-main .artifact-list:not(:empty) + .side-empty {
   display: none;
 }
 
+.artifact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.artifact-card {
+  display: grid;
+  grid-template-rows: 168px auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.artifact-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lifted);
+  transform: translateY(-1px);
+  color: inherit;
+}
+
+.artifact-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.artifact-card > img {
+  width: 100%;
+  height: 168px;
+  object-fit: contain;
+  object-position: center;
+  background:
+    linear-gradient(45deg, var(--bg-sunken) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-sunken) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-sunken) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-sunken) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: #fff;
+  border-bottom: 1px solid var(--line-subtle);
+  display: block;
+  padding: 10px;
+  box-sizing: border-box;
+  transition: transform 0.18s ease;
+}
+
+.artifact-card:hover > img {
+  transform: scale(1.015);
+}
+
+.artifact-file-icon {
+  width: 100%;
+  height: 168px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--line-subtle);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.artifact-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+  background: var(--panel);
+}
+
+.artifact-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-badge {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body[data-page="canvas"] .canvas-main .side-panel-body[data-panel-body="artifacts"] {
+  padding: 12px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+body[data-page="canvas"] .canvas-main .side-panel-body[data-panel-body="artifacts"] .panel-header {
+  margin-bottom: 0;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+body[data-page="canvas"] .canvas-main .side-panel-body[data-panel-body="artifacts"] .artifact-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+body[data-page="canvas"] .canvas-main .side-panel-body[data-panel-body="artifacts"] .side-empty {
+  flex-shrink: 0;
+}
+
 @media (max-width: 1180px) {
   .canvas-main {
-    grid-template-columns: 56px minmax(0, 1fr) 300px;
+    grid-template-columns: 56px minmax(0, 1fr) minmax(280px, 320px);
   }
 }
 
@@ -2179,6 +2308,228 @@ body[data-page="canvas"] .svg-rerun-controls #regenerateSvgBtn {
   visibility: hidden;
   pointer-events: none;
   transform: translateY(8px);
+}
+
+/* Step-3 icon matting review gate */
+.icon-review-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.icon-review-overlay[hidden] {
+  display: none !important;
+}
+
+.icon-review-card {
+  pointer-events: auto;
+  width: min(1100px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  padding: 18px 18px 16px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.icon-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.icon-review-title {
+  margin: 4px 0 6px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.icon-review-subtitle {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+.icon-review-header-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.icon-review-count {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.icon-review-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.icon-review-toolbar .ghost.is-active,
+.icon-review-actions .ghost.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.icon-review-status {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel-tinted);
+  border: 1px solid var(--line);
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+
+.icon-review-status.is-error {
+  color: #b42318;
+  border-color: color-mix(in srgb, #f04438 35%, var(--line));
+  background: color-mix(in srgb, #f04438 10%, var(--panel));
+}
+
+.icon-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.icon-review-empty {
+  grid-column: 1 / -1;
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--ink-secondary);
+}
+
+.icon-review-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.icon-review-item.is-guarded {
+  border-color: color-mix(in srgb, #f79009 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, #f79009 12%, transparent);
+}
+
+.icon-review-item.is-original {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.icon-review-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.icon-review-item-head strong {
+  font-size: 13px;
+}
+
+.icon-review-item-status {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.icon-review-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.icon-review-thumb {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  min-width: 0;
+}
+
+.icon-review-thumb.is-checker {
+  background-color: #f3f4f6;
+  background-image:
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+    linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+}
+
+.icon-review-thumb figcaption {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  padding: 4px 6px 0;
+}
+
+.icon-review-thumb img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: contain;
+  padding: 6px;
+}
+
+.icon-review-meta {
+  min-height: 1.2em;
+  font-size: 11px;
+  color: var(--ink-secondary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.icon-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-review-actions .ghost {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 860px) {
+  .icon-review-overlay {
+    inset: 8px;
+  }
+
+  .icon-review-header {
+    flex-direction: column;
+  }
+
+  .icon-review-header-meta {
+    align-items: flex-start;
+  }
+
+  .icon-review-thumb img {
+    height: 84px;
+  }
 }
 
 .pipeline-card {
