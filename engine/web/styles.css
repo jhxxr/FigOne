@@ -2438,6 +2438,16 @@ body[data-page="canvas"] .svg-rerun-controls #regenerateSvgBtn {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
 }
 
+.icon-review-item.is-white-key {
+  border-color: color-mix(in srgb, #4a90e2 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, #4a90e2 10%, transparent);
+}
+
+.icon-review-item.is-border-lost {
+  border-color: color-mix(in srgb, #f79009 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, #f79009 12%, transparent);
+}
+
 .icon-review-item-head {
   display: flex;
   align-items: center;

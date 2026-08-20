@@ -294,6 +294,8 @@ class IconRematteRequest(BaseModel):
     labels: list[str] = Field(default_factory=list)
     # True: 强制把 nobg 写成不透明原裁切（不跑模型）
     prefer_original: bool = False
+    # True: 用白底转透明重算（不跑模型），细边框无损
+    prefer_white_key: bool = False
     # True: 重抠时关闭实心填充保护，强制使用模型 alpha
     disable_fill_guard: bool = False
 
@@ -999,6 +1001,12 @@ def _load_icon_review_for_job(job_id: str, output_dir: Path) -> dict:
                     # 保护的路径是对的，因为那时 nobg 已被换成原裁切），这里文件
                     # 仍是抠坏的 matte，必须如实标 matted。
                     info["choice"] = "matted"
+                elif verdict.get("border_loss_triggered"):
+                    # 边框被 RMBG 抹掉：白键能无损保住边框，且可由 crop 现场重算。
+                    # 同样只给建议、如实标 matted，由用户点一下再落盘。
+                    info["status"] = "border_lost"
+                    info["recommended_choice"] = "white_key"
+                    info["choice"] = "matted"
         write_icon_review(output_dir, infos, notes="rebuilt from icons/")
         review = load_icon_review(output_dir)
     return _enrich_icon_review(job_id, output_dir, review)
@@ -1020,20 +1028,18 @@ def post_job_icon_choices(job_id: str, req: IconChoicesRequest) -> JSONResponse:
     if not req.choices:
         raise HTTPException(status_code=400, detail="choices must not be empty")
 
-    from autofigure2 import apply_icon_choices
+    from autofigure2 import ICON_CHOICES, apply_icon_choices, normalize_icon_choice
 
     mapping: dict[str, str] = {}
     for item in req.choices:
         label = (item.label or "").strip()
-        choice = (item.choice or "").strip().lower()
         if not label:
             raise HTTPException(status_code=400, detail="choice.label is required")
-        if choice in ("crop", "raw", "source"):
-            choice = "original"
-        if choice not in ("matted", "original"):
+        choice = normalize_icon_choice(item.choice)
+        if choice is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid choice for {label!r}: use matted or original",
+                detail=f"Invalid choice for {label!r}: use {' / '.join(ICON_CHOICES)}",
             )
         mapping[label] = choice
 
@@ -1067,6 +1073,7 @@ def post_job_icon_rematte(job_id: str, req: IconRematteRequest) -> JSONResponse:
             rmbg_model_path=str(rmbg_model) if rmbg_model else None,
             disable_fill_guard=bool(req.disable_fill_guard),
             prefer_original=bool(req.prefer_original),
+            prefer_white_key=bool(req.prefer_white_key),
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

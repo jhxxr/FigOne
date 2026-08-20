@@ -219,6 +219,53 @@ RMBG_FILL_GUARD_ENABLED = (
 )
 
 # ---------------------------------------------------------------------------
+# 白底抠图（white-key）与边框流失保护
+# ---------------------------------------------------------------------------
+# RMBG-2.0 是给"照片里的主体"设计的显著性模型，而学术插图的面板是白底线稿：
+# 细边框、浅色描边这类低显著性像素会被它当背景抹掉。实测一次真实运行中 10 个
+# 带边框的面板，RMBG 只保住了边框的 0~43%。
+#
+# 这类图其实不需要语义分割——背景按构造就是白纸，"把白色变透明、其余全留"
+# 就是正确操作。实测白键把边框保留率提到 50~93%，且非白内容召回 100%。
+# 距离纯白多远开始变不透明；linear ramp 到该距离即完全不透明，兼顾抗锯齿边缘。
+WHITE_KEY_RAMP_DISTANCE = 24.0
+# 判定某像素属于"墨迹"（用于统计，不参与 alpha 计算）。
+WHITE_KEY_INK_DISTANCE = 25.0
+
+# 边框流失判据：取距 crop 边缘 2~7px 的环带（面板边框所在处）。
+ICON_BORDER_RING_INNER = 2
+ICON_BORDER_RING_OUTER = 7
+# 环带中非白占比达到该值，才认为"这个 crop 确实有边框"。
+# 实测有边框的面板为 40~93%，无边框的为 8~28%，取 0.35 落在空档里。
+ICON_BORDER_PRESENT_RATIO = 0.35
+# 有边框却只保住不到该比例，判定边框被抠掉，改用白键重抠。
+ICON_BORDER_KEPT_RATIO = 0.3
+# 设 FIGONE_BORDER_GUARD=0 可关闭边框流失保护。
+ICON_BORDER_GUARD_ENABLED = (
+    os.environ.get("FIGONE_BORDER_GUARD", "1").strip() != "0"
+)
+
+# 审图台的三种可选贴片来源。白键可由 crop 现场算出，不需要加载模型，
+# 因此适合作为审图台上随点随看的选项。
+ICON_CHOICES = ("matted", "original", "white_key")
+# 用户/旧数据可能用的别名。
+ICON_CHOICE_ALIASES = {
+    "crop": "original",
+    "raw": "original",
+    "source": "original",
+    "whitekey": "white_key",
+    "white-key": "white_key",
+    "white": "white_key",
+}
+
+
+def normalize_icon_choice(value: Any) -> Optional[str]:
+    """把用户传来的 choice 归一到 ICON_CHOICES，无法识别时返回 None。"""
+    text = str(value or "").strip().lower().replace(" ", "")
+    text = ICON_CHOICE_ALIASES.get(text, text)
+    return text if text in ICON_CHOICES else None
+
+# ---------------------------------------------------------------------------
 # 图标回填的长宽比策略
 # ---------------------------------------------------------------------------
 # 贴片默认用 preserveAspectRatio="xMidYMid meet"，即等比缩放后居中，于是当 LLM
@@ -2953,10 +3000,43 @@ class BriaRMBG2Remover:
 
         matted.save(out_path)
         _, diagnosis = self._fill_guard_verdict(image_rgb, mask)
+
+        # 边框流失保护：RMBG 会抹掉面板细边框。这不是"抠错了主体"，而是
+        # 这类白底线稿本就不该用显著性模型，所以改用白键重抠而非退回原图
+        #（退回原图会连白底一起留下）。见 _border_loss_verdict()。
+        if ICON_BORDER_GUARD_ENABLED and not disable_fill_guard:
+            rgb_arr = np.asarray(image_rgb, dtype=np.float32)
+            lost, border_diag, present, kept = _border_loss_verdict(rgb_arr, alpha_arr)
+            if lost:
+                wk_alpha = _white_key_alpha(rgb_arr)
+                wk = image_rgb.convert("RGBA")
+                wk.putalpha(Image.fromarray((wk_alpha * 255).astype(np.uint8), mode="L"))
+                wk.save(out_path)
+                wk_coverage = float((wk_alpha > 0.5).mean())
+                print(
+                    f"    边框流失保护触发（{border_diag}）：改用白底抠图，"
+                    f"前景占比 {wk_coverage:.1%}"
+                )
+                return {
+                    "nobg_path": str(out_path),
+                    "matte_path": str(matte_path),
+                    "fill_guard_triggered": False,
+                    "border_loss_triggered": True,
+                    "diagnosis": f"{diagnosis}；{border_diag}",
+                    "mode": "white_key",
+                    "alpha_coverage": wk_coverage,
+                    "removed_ratio": float((wk_alpha <= 0.5).mean()),
+                    "matte_alpha_coverage": alpha_coverage,
+                    "border_present": present,
+                    "border_kept": kept,
+                    "choice": "white_key",
+                }
+
         return {
             "nobg_path": str(out_path),
             "matte_path": str(matte_path),
             "fill_guard_triggered": False,
+            "border_loss_triggered": False,
             "diagnosis": diagnosis,
             "mode": "matted",
             "alpha_coverage": alpha_coverage,
@@ -3020,12 +3100,68 @@ def diagnose_icon_pair(crop_path: str | Path, nobg_path: str | Path) -> dict | N
         return None
 
     triggered, diagnosis, coverage, removed_ratio = _fill_guard_verdict_arrays(rgb, alpha)
+    border_lost, border_diag, present, kept = _border_loss_verdict(rgb, alpha)
+    if border_lost:
+        diagnosis = f"{diagnosis}；{border_diag}"
     return {
         "fill_guard_triggered": triggered,
+        "border_loss_triggered": border_lost,
         "diagnosis": diagnosis,
         "alpha_coverage": coverage,
         "removed_ratio": removed_ratio,
+        "border_present": present,
+        "border_kept": kept,
     }
+
+
+def _white_key_alpha(rgb: "np.ndarray") -> "np.ndarray":
+    """
+    白底转透明：alpha 随"离纯白的距离"线性上升。
+
+    学术插图的面板背景按构造就是白纸，不需要语义分割。相比 RMBG 的显著性判断，
+    这个操作对细边框、浅色描边、实心色块都是无损的。
+    """
+    distance = np.linalg.norm(rgb - 255.0, axis=2)
+    return np.clip(distance / WHITE_KEY_RAMP_DISTANCE, 0.0, 1.0).astype(np.float32)
+
+
+def _border_ring_mask(height: int, width: int) -> "np.ndarray":
+    """距 crop 四边 2~7px 的环带，面板边框通常落在这里。"""
+    ring = np.zeros((height, width), dtype=bool)
+    lo, hi = ICON_BORDER_RING_INNER, ICON_BORDER_RING_OUTER
+    if height <= hi * 2 or width <= hi * 2:
+        return ring
+    ring[lo:hi, :] = True
+    ring[-hi:-lo, :] = True
+    ring[:, lo:hi] = True
+    ring[:, -hi:-lo] = True
+    return ring
+
+
+def _border_loss_verdict(
+    rgb: "np.ndarray", alpha: "np.ndarray"
+) -> tuple[bool, str, float, float]:
+    """
+    判断这次抠图是否把面板边框抹掉了。
+
+    与实心填充保护互补：填充保护看"被抠掉的整体是否非白"，只抓大面积色块；
+    细边框在总面积里占比极小，抠掉它不会触发那条判据，得单独看边环。
+
+    返回 (是否边框流失, 诊断文本, 边框存在度, 边框保留率)。
+    """
+    ring = _border_ring_mask(*alpha.shape)
+    if not ring.any():
+        return False, "尺寸过小，不判定边框", 0.0, 0.0
+
+    distance = np.linalg.norm(rgb - 255.0, axis=2)
+    present = float((distance[ring] > WHITE_KEY_INK_DISTANCE).mean())
+    kept = float((alpha[ring] > 0.5).mean())
+
+    if present < ICON_BORDER_PRESENT_RATIO:
+        return False, f"无明显边框（边环非白 {present:.0%}）", present, kept
+
+    diagnosis = f"边框存在 {present:.0%}，抠图后保留 {kept:.0%}"
+    return kept < ICON_BORDER_KEPT_RATIO, diagnosis, present, kept
 
 
 ICON_REVIEW_FILENAME = "icon_review.json"
@@ -3087,10 +3223,14 @@ def build_icon_review_payload(
         choice = info.get("choice") or (
             "original" if info.get("fill_guard_triggered") else "matted"
         )
+        if info.get("border_loss_triggered") and not info.get("choice"):
+            choice = "white_key"
         status = info.get("status")
         if not status:
             if info.get("fill_guard_triggered"):
                 status = "guarded"
+            elif info.get("border_loss_triggered"):
+                status = "border_fixed"
             elif choice == "original":
                 status = "original"
             else:
@@ -3109,12 +3249,15 @@ def build_icon_review_payload(
                 "crop_path": f"icons/icon_{label_clean}.png",
                 "nobg_path": f"icons/icon_{label_clean}_nobg.png",
                 "matte_path": f"icons/icon_{label_clean}_matte.png",
-                "choice": choice if choice in ("matted", "original") else "matted",
+                "choice": normalize_icon_choice(choice) or "matted",
                 "fill_guard_triggered": bool(info.get("fill_guard_triggered")),
+                "border_loss_triggered": bool(info.get("border_loss_triggered")),
                 "diagnosis": info.get("diagnosis") or "",
                 "mode": info.get("mode") or ("original_fallback" if info.get("fill_guard_triggered") else "matted"),
                 "alpha_coverage": info.get("alpha_coverage"),
                 "removed_ratio": info.get("removed_ratio"),
+                "border_present": info.get("border_present"),
+                "border_kept": info.get("border_kept"),
                 "status": status,
                 # 抠图当场触发保护时 nobg 已是原裁切，choice 与文件一致；
                 # 老任务事后体检只能给建议（见 server._load_icon_review_for_job）。
@@ -3166,10 +3309,11 @@ def _apply_icon_choice_files(
 
     - matted: restore the model matte from the side copy (`_matte.png`)
     - original: copy opaque crop over nobg so step 5 embeds the uncut patch
+    - white_key: recompute white-background-to-alpha from the crop (no model)
 
-    两个方向都必须可逆，否则用户切一次就回不去了。旧任务可能没有 `_matte.png`
-    （该副本是后加的），此时若 nobg 已被覆盖成不透明，就无法凭本地文件恢复，
-    只能要求重抠——这种情况明确报错，而不是假装成功。
+    三个方向都必须可逆，否则用户切一次就回不去了。white_key 与 original 都能由
+    crop 现场重算，matted 依赖 `_matte.png` 侧存；旧任务可能没有该副本（后加的），
+    此时若 nobg 已被覆盖就无法凭本地文件恢复，只能要求重抠——明确报错，不假装成功。
     """
     label_clean = _normalize_label_clean(label_clean)
     crop_path = icons_dir / f"icon_{label_clean}.png"
@@ -3178,13 +3322,27 @@ def _apply_icon_choice_files(
     if not _nonempty_file(crop_path):
         raise FileNotFoundError(f"缺少裁切图: {crop_path.name}")
 
-    if choice == "original":
-        # 覆盖前先补一份 matte 侧存，兼容 `_matte.png` 之前生成的旧任务。
+    def _preserve_matte() -> None:
+        """覆盖 nobg 前补一份 matte 侧存，兼容 `_matte.png` 之前生成的旧任务。"""
         if not _nonempty_file(matte_path) and _nonempty_file(nobg_path):
-            shutil.copyfile(nobg_path, matte_path)
+            if (_alpha_coverage_of_png(nobg_path) or 0.0) < 0.999:
+                shutil.copyfile(nobg_path, matte_path)
+
+    if choice == "original":
+        _preserve_matte()
         with Image.open(crop_path) as crop_img:
             crop_img.convert("RGBA").save(nobg_path)
         mode = "original_forced"
+    elif choice == "white_key":
+        _preserve_matte()
+        with Image.open(crop_path) as crop_img:
+            rgb_img = crop_img.convert("RGB")
+            rgb = np.asarray(rgb_img, dtype=np.float32)
+            alpha = _white_key_alpha(rgb)
+            out = rgb_img.convert("RGBA")
+            out.putalpha(Image.fromarray((alpha * 255).astype(np.uint8), mode="L"))
+            out.save(nobg_path)
+        mode = "white_key"
     else:
         if _nonempty_file(matte_path):
             shutil.copyfile(matte_path, nobg_path)
@@ -3257,11 +3415,11 @@ def apply_icon_choices(
     now = datetime.now().isoformat(timespec="seconds")
     for raw_label, raw_choice in (choices or {}).items():
         label_clean = _normalize_label_clean(raw_label)
-        choice = str(raw_choice or "").strip().lower()
-        if choice in ("crop", "raw", "source"):
-            choice = "original"
-        if choice not in ("matted", "original"):
-            raise ValueError(f"无效 choice={raw_choice!r}（仅支持 matted / original）")
+        choice = normalize_icon_choice(raw_choice)
+        if choice is None:
+            raise ValueError(
+                f"无效 choice={raw_choice!r}（仅支持 {' / '.join(ICON_CHOICES)}）"
+            )
         result = _apply_icon_choice_files(icons_dir, label_clean, choice)
         item = by_label.get(label_clean) or {
             "label": f"<AF>{label_clean[2:]}" if label_clean.startswith("AF") else label_clean,
@@ -3296,11 +3454,14 @@ def rematte_icons(
     rmbg_model_path: Optional[str] = None,
     disable_fill_guard: bool = False,
     prefer_original: bool = False,
+    prefer_white_key: bool = False,
 ) -> dict:
     """
     Re-run RMBG for selected icons (or all) using existing crops / boxlib.
 
     prefer_original=True: skip model and force nobg = opaque crop.
+    prefer_white_key=True: skip model and recompute white-background-to-alpha.
+    两种 prefer_* 都不加载模型，因此在审图台上点选是即时的。
     """
     output_dir = Path(output_dir)
     figure_path = output_dir / "figure.png"
@@ -3333,7 +3494,7 @@ def rematte_icons(
 
     image = Image.open(figure_path)
     remover = None
-    if not prefer_original:
+    if not prefer_original and not prefer_white_key:
         resolved_rmbg = _resolve_rmbg_model_path(rmbg_model_path)
         _ensure_rmbg2_access_ready(resolved_rmbg or rmbg_model_path)
         remover = BriaRMBG2Remover(
@@ -3392,27 +3553,32 @@ def rematte_icons(
                 }
             )
 
-            if prefer_original:
-                nobg_path = icons_dir / f"icon_{label_clean}_nobg.png"
-                matte_path = _icon_matte_path(icons_dir, label_clean)
-                # 与 _apply_icon_choice_files 一致：覆盖前保住抠图副本，否则
-                # 「全部用原裁切」会让所有图标再也切不回抠图版。
-                if not _nonempty_file(matte_path) and _nonempty_file(nobg_path):
-                    shutil.copyfile(nobg_path, matte_path)
-                with Image.open(crop_path) as crop_img:
-                    crop_img.convert("RGBA").save(nobg_path)
+            if prefer_original or prefer_white_key:
+                # 复用 _apply_icon_choice_files：它已处理 matte 侧存保护与
+                # 白键重算，避免两处各写一遍导致行为漂移。
+                forced = "original" if prefer_original else "white_key"
+                res = _apply_icon_choice_files(icons_dir, label_clean, forced)
                 item.update(
                     {
-                        "choice": "original",
-                        "mode": "original_forced",
+                        "choice": forced,
+                        "mode": res["mode"],
                         "fill_guard_triggered": False,
-                        "diagnosis": "用户强制使用原裁切",
-                        "alpha_coverage": 1.0,
-                        "removed_ratio": 0.0,
-                        "status": "original",
+                        "border_loss_triggered": False,
+                        "diagnosis": (
+                            "用户强制使用原裁切"
+                            if prefer_original
+                            else "用户改用白底抠图（细边框无损）"
+                        ),
+                        "alpha_coverage": res.get("alpha_coverage"),
+                        "removed_ratio": (
+                            None
+                            if res.get("alpha_coverage") is None
+                            else 1.0 - float(res["alpha_coverage"])
+                        ),
+                        "status": forced,
                     }
                 )
-                print(f"  {label}: 已改为使用原裁切")
+                print(f"  {label}: 已改为 {forced}")
             else:
                 assert remover is not None
                 result = remover.remove_background(
@@ -3425,12 +3591,17 @@ def rematte_icons(
                         "choice": result.get("choice") or "matted",
                         "mode": result.get("mode"),
                         "fill_guard_triggered": bool(result.get("fill_guard_triggered")),
+                        "border_loss_triggered": bool(result.get("border_loss_triggered")),
                         "diagnosis": result.get("diagnosis") or "",
                         "alpha_coverage": result.get("alpha_coverage"),
                         "removed_ratio": result.get("removed_ratio"),
+                        "border_present": result.get("border_present"),
+                        "border_kept": result.get("border_kept"),
                         "status": (
                             "guarded"
                             if result.get("fill_guard_triggered")
+                            else "border_fixed"
+                            if result.get("border_loss_triggered")
                             else "ok"
                         ),
                     }

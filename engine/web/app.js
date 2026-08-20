@@ -380,13 +380,14 @@
         icon_review_eyebrow: "ICON MATTING REVIEW",
         icon_review_title: "Review cutouts before SVG rebuild",
         icon_review_subtitle:
-          "Compare each crop with its transparent cutout. Keep, force original, or rematte weak results, then continue to SVG.",
+          "Compare each crop with its transparent cutout. Keep, switch to white-key / original, or rematte weak results, then continue to SVG.",
         icon_review_badge: "Review",
         icon_review_badge_ready: "Ready",
         icon_review_count: "{count} icons",
         icon_review_guarded: "{count} need attention",
         icon_review_refresh: "Refresh",
         icon_review_all_matted: "All use cutout",
+        icon_review_all_white_key: "All use white-key",
         icon_review_all_original: "All use crop",
         icon_review_rematte_all: "Rematte all",
         icon_review_approve: "Approve & continue SVG",
@@ -394,11 +395,15 @@
         icon_review_crop: "Crop",
         icon_review_cutout: "Cutout",
         icon_review_use_matted: "Use cutout",
+        icon_review_use_white_key: "Use white-key",
         icon_review_use_original: "Use crop",
         icon_review_rematte: "Rematte",
         icon_review_rematte_force: "Force model alpha",
         icon_review_status_ok: "OK",
         icon_review_status_guarded: "Fill protected",
+        icon_review_status_border_lost: "Border lost",
+        icon_review_status_border_fixed: "Border fixed",
+        icon_review_status_white_key: "Using white-key",
         icon_review_status_original: "Using crop",
         icon_review_status_busy: "Working...",
         icon_review_loading: "Loading icon review...",
@@ -793,13 +798,14 @@
         icon_review_eyebrow: "抠图人工确认",
         icon_review_title: "确认抠图后再重建 SVG",
         icon_review_subtitle:
-          "对比每张裁切与透明抠图。保留、改用原裁切，或对效果差的单张重抠，确认后再继续 SVG。",
+          "对比每张裁切与透明抠图。保留、改用白底抠图 / 原裁切，或对效果差的单张重抠，确认后再继续 SVG。",
         icon_review_badge: "待确认",
         icon_review_badge_ready: "可继续",
         icon_review_count: "{count} 张图标",
         icon_review_guarded: "{count} 张需留意",
         icon_review_refresh: "刷新",
         icon_review_all_matted: "全部用抠图",
+        icon_review_all_white_key: "全部用白底抠图",
         icon_review_all_original: "全部用原裁切",
         icon_review_rematte_all: "全部重抠",
         icon_review_approve: "确认并继续 SVG",
@@ -807,11 +813,15 @@
         icon_review_crop: "原裁切",
         icon_review_cutout: "抠图",
         icon_review_use_matted: "用抠图",
+        icon_review_use_white_key: "用白底抠图",
         icon_review_use_original: "用原裁切",
         icon_review_rematte: "重抠",
         icon_review_rematte_force: "强制模型 alpha",
         icon_review_status_ok: "正常",
         icon_review_status_guarded: "实心保护",
+        icon_review_status_border_lost: "边框流失",
+        icon_review_status_border_fixed: "边框已修",
+        icon_review_status_white_key: "使用白底抠图",
         icon_review_status_original: "使用原裁切",
         icon_review_status_busy: "处理中...",
         icon_review_loading: "正在加载抠图审阅...",
@@ -3292,6 +3302,7 @@
     const iconReviewCount = $("iconReviewCount");
     const iconReviewRefreshBtn = $("iconReviewRefreshBtn");
     const iconReviewAllMattedBtn = $("iconReviewAllMattedBtn");
+    const iconReviewAllWhiteKeyBtn = $("iconReviewAllWhiteKeyBtn");
     const iconReviewAllOriginalBtn = $("iconReviewAllOriginalBtn");
     const iconReviewRematteAllBtn = $("iconReviewRematteAllBtn");
     const iconReviewApproveBtn = $("iconReviewApproveBtn");
@@ -3423,6 +3434,7 @@
       setText("iconReviewSubtitle", t("canvas.icon_review_subtitle"));
       if (iconReviewRefreshBtn) iconReviewRefreshBtn.textContent = t("canvas.icon_review_refresh");
       if (iconReviewAllMattedBtn) iconReviewAllMattedBtn.textContent = t("canvas.icon_review_all_matted");
+      if (iconReviewAllWhiteKeyBtn) iconReviewAllWhiteKeyBtn.textContent = t("canvas.icon_review_all_white_key");
       if (iconReviewAllOriginalBtn) iconReviewAllOriginalBtn.textContent = t("canvas.icon_review_all_original");
       if (iconReviewRematteAllBtn) iconReviewRematteAllBtn.textContent = t("canvas.icon_review_rematte_all");
       if (iconReviewApproveBtn) iconReviewApproveBtn.textContent = t("canvas.icon_review_approve");
@@ -4074,6 +4086,11 @@
         setAllIconChoices("matted");
       });
     }
+    if (iconReviewAllWhiteKeyBtn) {
+      iconReviewAllWhiteKeyBtn.addEventListener("click", () => {
+        setAllIconChoices("white_key");
+      });
+    }
     if (iconReviewAllOriginalBtn) {
       iconReviewAllOriginalBtn.addEventListener("click", () => {
         setAllIconChoices("original");
@@ -4101,7 +4118,7 @@
         const label = btn.getAttribute("data-label") || "";
         const action = btn.getAttribute("data-icon-action") || "";
         if (!label || !action) return;
-        if (action === "matted" || action === "original") {
+        if (action === "matted" || action === "original" || action === "white_key") {
           iconReviewChoices[label] = action;
           renderIconReview(iconReviewState);
           return;
@@ -4495,12 +4512,40 @@
       }
     }
 
+    function normalizeIconChoice(value) {
+      const text = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      if (text === "crop" || text === "raw" || text === "source") return "original";
+      if (
+        text === "whitekey" ||
+        text === "white-key" ||
+        text === "white" ||
+        text === "white_key"
+      ) {
+        return "white_key";
+      }
+      if (text === "matted" || text === "original") return text;
+      return null;
+    }
+
+    function resolveIconChoice(icon) {
+      const persisted = normalizeIconChoice(icon?.choice);
+      if (persisted) return persisted;
+      const recommended = normalizeIconChoice(icon?.recommended_choice);
+      if (recommended) return recommended;
+      if (icon?.border_loss_triggered || icon?.status === "border_fixed") return "white_key";
+      if (icon?.fill_guard_triggered || icon?.status === "guarded") return "original";
+      return "matted";
+    }
+
     function syncIconChoicesFromState(payload) {
       const next = {};
       for (const icon of payload?.icons || []) {
         const label = icon.label_clean || icon.label;
         if (!label) continue;
-        next[label] = icon.choice === "original" ? "original" : "matted";
+        next[label] = resolveIconChoice(icon);
       }
       iconReviewChoices = next;
     }
@@ -4536,13 +4581,24 @@
 
       for (const icon of icons) {
         const label = icon.label_clean || icon.label || "?";
-        const choice = iconReviewChoices[label] || (icon.choice === "original" ? "original" : "matted");
+        const choice =
+          normalizeIconChoice(iconReviewChoices[label]) ||
+          normalizeIconChoice(icon.choice) ||
+          "matted";
         const card = document.createElement("article");
         card.className = "icon-review-item";
+        const borderNeedsAttention =
+          icon.border_loss_triggered ||
+          icon.status === "border_lost" ||
+          icon.status === "border_fixed";
         if (icon.fill_guard_triggered || icon.status === "guarded") {
           card.classList.add("is-guarded");
         }
+        if (borderNeedsAttention && choice !== "white_key") {
+          card.classList.add("is-border-lost");
+        }
         if (choice === "original") card.classList.add("is-original");
+        if (choice === "white_key") card.classList.add("is-white-key");
 
         const head = document.createElement("div");
         head.className = "icon-review-item-head";
@@ -4552,6 +4608,12 @@
         status.className = "icon-review-item-status";
         if (icon.fill_guard_triggered || icon.status === "guarded") {
           status.textContent = t("canvas.icon_review_status_guarded");
+        } else if (icon.status === "border_lost" || (icon.border_loss_triggered && choice !== "white_key")) {
+          status.textContent = t("canvas.icon_review_status_border_lost");
+        } else if (icon.status === "border_fixed" || (icon.border_loss_triggered && choice === "white_key")) {
+          status.textContent = t("canvas.icon_review_status_border_fixed");
+        } else if (choice === "white_key") {
+          status.textContent = t("canvas.icon_review_status_white_key");
         } else if (choice === "original") {
           status.textContent = t("canvas.icon_review_status_original");
         } else {
@@ -4608,6 +4670,10 @@
             active: choice === "matted",
             primary: choice === "matted",
           }),
+          mkBtn("white_key", t("canvas.icon_review_use_white_key"), {
+            active: choice === "white_key",
+            primary: choice === "white_key",
+          }),
           mkBtn("original", t("canvas.icon_review_use_original"), {
             active: choice === "original",
             primary: choice === "original",
@@ -4624,6 +4690,7 @@
       [
         iconReviewRefreshBtn,
         iconReviewAllMattedBtn,
+        iconReviewAllWhiteKeyBtn,
         iconReviewAllOriginalBtn,
         iconReviewRematteAllBtn,
         iconReviewApproveBtn,
@@ -4691,10 +4758,11 @@
     }
 
     function setAllIconChoices(choice) {
+      const normalized = normalizeIconChoice(choice) || "matted";
       const icons = iconReviewState?.icons || [];
       for (const icon of icons) {
         const label = icon.label_clean || icon.label;
-        if (label) iconReviewChoices[label] = choice;
+        if (label) iconReviewChoices[label] = normalized;
       }
       renderIconReview(iconReviewState);
     }
