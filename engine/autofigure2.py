@@ -22,8 +22,13 @@ SAM3 多Prompt支持 (--sam_prompt):
 
 Box合并功能 (--merge_threshold):
 - 对SAM3检测到的重叠box进行合并去重
-- 重叠比例 = 交集面积 / 较小box面积
-- 默认阈值0.9，设为0表示不合并
+- 两条判据（满足其一即合并）：
+  1. IoU = 交集面积 / 并集面积 >= 阈值（两框基本重合，属重复检测）
+  2. 包含比例 = 交集面积 / 较小box面积 >= 阈值（小框被大框包住，属子部件）
+- 默认阈值0.85，设为0表示不合并
+- 两道防雪球保护（见 --max_detection_area_ratio）：
+  * 单个原始检测框超过整图 25% 直接丢弃
+  * 合并结果超过整图 25% 则拒绝该次合并
 - 跨prompt检测结果也会自动去重
 
 流程：
@@ -176,6 +181,20 @@ OPENAI_DEFAULT_IMAGE_SIZE = "1536x1024"
 OPENAI_IMAGE_SIZE_CHOICES = ("1024x1024", "1536x1024", "1024x1536", "auto")
 UPSCALE_TARGET_LONG_EDGE = 3840
 BOXLIB_NO_ICON_MODE_KEY = "no_icon_mode"
+
+# Box 合并参数
+# 重叠判据默认按 IoU 走，0.85 表示"两框基本重合才算重复检测"。
+DEFAULT_MERGE_THRESHOLD = 0.85
+# 单个原始检测框若超过整图这一比例，直接丢弃：SAM3 会偶发输出覆盖大半张图的
+# 低分噪声框（实测 score≈0.07 / 占图 61%），它不是图标，且会污染后续合并。
+DEFAULT_MAX_DETECTION_AREA_RATIO = 0.25
+# 合并后的并集若超过整图这一比例，拒绝该次合并，防止雪球式吞并。
+DEFAULT_MAX_MERGED_AREA_RATIO = 0.25
+# containment 通道可选的面积相似度门槛：较小框面积 / 较大框面积。
+# 默认 0.0（不启用）——把小图标并进包住它的面板通常正是期望行为，
+# 实测启用该门槛会让嵌套子部件无法归并、框数从 14 涨到 69。
+# 仅当某张图确实需要保留面板内的子图标时才调高。
+DEFAULT_CONTAINMENT_SIZE_RATIO = 0.0
 
 # SAM3 API config
 SAM3_FAL_API_URL = "https://fal.run/fal-ai/sam-3/image"
@@ -1684,9 +1703,47 @@ def get_label_font(box_width: int, box_height: int) -> ImageFont.FreeTypeFont:
 # Box 合并辅助函数
 # ============================================================================
 
+def _box_area(box: dict) -> int:
+    return max(0, box["x2"] - box["x1"]) * max(0, box["y2"] - box["y1"])
+
+
+def _intersection_area(box1: dict, box2: dict) -> int:
+    x1 = max(box1["x1"], box2["x1"])
+    y1 = max(box1["y1"], box2["y1"])
+    x2 = min(box1["x2"], box2["x2"])
+    y2 = min(box1["y2"], box2["y2"])
+    if x2 <= x1 or y2 <= y1:
+        return 0
+    return (x2 - x1) * (y2 - y1)
+
+
+def calculate_iou(box1: dict, box2: dict) -> float:
+    """
+    计算两个box的 IoU（交并比）
+
+    IoU = 交集面积 / 并集面积。与 containment 不同，IoU 会因尺寸悬殊而变小，
+    因此不会把一个小图标判定为"等同于"包住它的整块面板。
+    """
+    intersection = _intersection_area(box1, box2)
+    if intersection == 0:
+        return 0.0
+
+    area1 = _box_area(box1)
+    area2 = _box_area(box2)
+    union = area1 + area2 - intersection
+    if union <= 0:
+        return 0.0
+    return intersection / union
+
+
 def calculate_overlap_ratio(box1: dict, box2: dict) -> float:
     """
-    计算两个box的重叠比例
+    计算两个box的重叠比例（containment，交集占较小box的比例）
+
+    注意：该指标对"小框嵌套在大框内"恒为 1.0，与两框尺寸是否接近无关。
+    这对"把面板内子部件并入面板"是想要的效果，但也意味着它无法区分
+    合理的层级归并与噪声框的吞并——后者由检测阶段的超大框过滤和
+    merge_overlapping_boxes() 的面积上限负责拦截。
 
     Args:
         box1: 第一个box，包含 x1, y1, x2, y2
@@ -1695,27 +1752,59 @@ def calculate_overlap_ratio(box1: dict, box2: dict) -> float:
     Returns:
         重叠比例 = 交集面积 / 较小box面积
     """
-    # 计算交集区域
-    x1 = max(box1["x1"], box2["x1"])
-    y1 = max(box1["y1"], box2["y1"])
-    x2 = min(box1["x2"], box2["x2"])
-    y2 = min(box1["y2"], box2["y2"])
-
-    # 无交集
-    if x2 <= x1 or y2 <= y1:
+    intersection = _intersection_area(box1, box2)
+    if intersection == 0:
         return 0.0
 
-    intersection = (x2 - x1) * (y2 - y1)
-
-    # 计算各自面积
-    area1 = (box1["x2"] - box1["x1"]) * (box1["y2"] - box1["y1"])
-    area2 = (box2["x2"] - box2["x1"]) * (box2["y2"] - box2["y1"])
+    area1 = _box_area(box1)
+    area2 = _box_area(box2)
 
     if area1 == 0 or area2 == 0:
         return 0.0
 
     # 返回交集占较小box的比例
     return intersection / min(area1, area2)
+
+
+def should_merge_boxes(
+    box1: dict,
+    box2: dict,
+    overlap_threshold: float,
+    *,
+    containment_size_ratio: float = DEFAULT_CONTAINMENT_SIZE_RATIO,
+) -> tuple[bool, str, float]:
+    """
+    判断两个 box 是否应该合并
+
+    两条独立通道：
+      1. IoU >= overlap_threshold —— 两框大体重合，视为同一对象的重复检测。
+      2. containment >= overlap_threshold —— 一个框几乎被另一个包住，
+         视为同一对象的子部件（如面板内的小图标），并入外层框。
+
+    containment_size_ratio 可对通道 2 追加面积相似度约束（较小/较大）。
+    默认 0.0 即不约束：把子部件并进面板通常正是期望行为。
+    只有在需要把面板内子图标当作独立图标输出时才调高该值。
+
+    Returns:
+        (是否合并, 判据名称, 判据数值)
+    """
+    iou = calculate_iou(box1, box2)
+    if iou >= overlap_threshold:
+        return True, "IoU", iou
+
+    containment = calculate_overlap_ratio(box1, box2)
+    if containment >= overlap_threshold:
+        if containment_size_ratio <= 0.0:
+            return True, "包含", containment
+        area1 = _box_area(box1)
+        area2 = _box_area(box2)
+        larger = max(area1, area2)
+        if larger > 0:
+            size_ratio = min(area1, area2) / larger
+            if size_ratio >= containment_size_ratio:
+                return True, "包含", containment
+
+    return False, "IoU", iou
 
 
 def merge_two_boxes(box1: dict, box2: dict) -> dict:
@@ -1755,13 +1844,29 @@ def merge_two_boxes(box1: dict, box2: dict) -> dict:
     return merged
 
 
-def merge_overlapping_boxes(boxes: list, overlap_threshold: float = 0.9) -> list:
+def merge_overlapping_boxes(
+    boxes: list,
+    overlap_threshold: float = DEFAULT_MERGE_THRESHOLD,
+    *,
+    image_size: Optional[tuple[int, int]] = None,
+    containment_size_ratio: float = DEFAULT_CONTAINMENT_SIZE_RATIO,
+    max_merged_area_ratio: float = DEFAULT_MAX_MERGED_AREA_RATIO,
+) -> list:
     """
     迭代合并重叠的boxes
 
+    判据见 should_merge_boxes()：IoU 通道 + containment 通道。
+
+    合并取并集，因此每次合并都会让框变大、进而与更多框相交。若不加约束，
+    这个过程会雪球式吞并整张图。max_merged_area_ratio 给出面积上限，
+    超限的合并直接拒绝。
+
     Args:
         boxes: box列表，每个box包含 x1, y1, x2, y2, score
-        overlap_threshold: 重叠阈值，超过此值则合并（默认0.9）
+        overlap_threshold: 重叠阈值，超过此值则合并（默认 0.85）
+        image_size: (width, height)，用于面积上限判断；为 None 时跳过该保护
+        containment_size_ratio: containment 通道要求的最小面积相似度
+        max_merged_area_ratio: 合并结果占整图面积的上限
 
     Returns:
         合并后的box列表，重新编号
@@ -1769,8 +1874,20 @@ def merge_overlapping_boxes(boxes: list, overlap_threshold: float = 0.9) -> list
     if overlap_threshold <= 0 or len(boxes) <= 1:
         return boxes
 
+    max_merged_area: Optional[float] = None
+    if image_size and image_size[0] > 0 and image_size[1] > 0:
+        max_merged_area = image_size[0] * image_size[1] * max_merged_area_ratio
+
     # 复制列表避免修改原数据
     working_boxes = [box.copy() for box in boxes]
+
+    # 记录被面积上限拒绝的配对，避免重复评估同一对。
+    # 按坐标而非 id() 建键：合并后旧 dict 可能被回收、id 被新对象复用，
+    # 那会让陈旧的拒绝记录错误命中新配对。
+    rejected: set[tuple[tuple[int, int, int, int], tuple[int, int, int, int]]] = set()
+
+    def _geom(box: dict) -> tuple[int, int, int, int]:
+        return (box["x1"], box["y1"], box["x2"], box["y2"])
 
     merged = True
     iteration = 0
@@ -1783,18 +1900,39 @@ def merge_overlapping_boxes(boxes: list, overlap_threshold: float = 0.9) -> list
             if merged:
                 break
             for j in range(i + 1, n):
-                ratio = calculate_overlap_ratio(working_boxes[i], working_boxes[j])
-                if ratio >= overlap_threshold:
-                    # 合并 box_i 和 box_j
-                    new_box = merge_two_boxes(working_boxes[i], working_boxes[j])
-                    # 移除原有两个box，添加合并后的box
-                    working_boxes = [
-                        working_boxes[k] for k in range(n) if k != i and k != j
-                    ]
-                    working_boxes.append(new_box)
-                    merged = True
-                    print(f"    迭代 {iteration}: 合并 box {i} 和 box {j} (重叠比例: {ratio:.2f})")
-                    break
+                key = (_geom(working_boxes[i]), _geom(working_boxes[j]))
+                if key in rejected:
+                    continue
+
+                ok, criterion, value = should_merge_boxes(
+                    working_boxes[i],
+                    working_boxes[j],
+                    overlap_threshold,
+                    containment_size_ratio=containment_size_ratio,
+                )
+                if not ok:
+                    continue
+
+                new_box = merge_two_boxes(working_boxes[i], working_boxes[j])
+
+                # 面积保护：拒绝会吞掉整图的合并
+                if max_merged_area is not None and _box_area(new_box) > max_merged_area:
+                    rejected.add(key)
+                    print(
+                        f"    迭代 {iteration}: 拒绝合并 box {i} 和 box {j} "
+                        f"({criterion}={value:.2f}，并集面积超过整图 "
+                        f"{max_merged_area_ratio:.0%})"
+                    )
+                    continue
+
+                # 移除原有两个box，添加合并后的box
+                working_boxes = [
+                    working_boxes[k] for k in range(n) if k != i and k != j
+                ]
+                working_boxes.append(new_box)
+                merged = True
+                print(f"    迭代 {iteration}: 合并 box {i} 和 box {j} ({criterion}: {value:.2f})")
+                break
 
     # 重新编号
     result = []
@@ -1843,6 +1981,45 @@ def _image_to_base64(image: Image.Image) -> str:
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def _clamp_box_to_image(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    width: int,
+    height: int,
+) -> Optional[tuple[int, int, int, int]]:
+    """
+    将 box 裁剪到图片边界内
+
+    越界坐标必须在写入 boxlib.json 之前收敛：PIL 的 Image.crop() 对越界区域
+    静默填充黑色而不报错，那些黑边会被当成真实像素喂给 RMBG 抠图。
+
+    Returns:
+        (x1, y1, x2, y2) 全部落在 [0, width] / [0, height] 内；
+        若裁剪后为空框则返回 None
+    """
+    try:
+        left, top, right, bottom = float(x1), float(y1), float(x2), float(y2)
+    except (TypeError, ValueError):
+        return None
+
+    # 容忍反向坐标（部分后端会给出 x2 < x1）
+    if right < left:
+        left, right = right, left
+    if bottom < top:
+        top, bottom = bottom, top
+
+    cx1 = max(0, min(width, int(round(left))))
+    cy1 = max(0, min(height, int(round(top))))
+    cx2 = max(0, min(width, int(round(right))))
+    cy2 = max(0, min(height, int(round(bottom))))
+
+    if cx2 <= cx1 or cy2 <= cy1:
+        return None
+    return cx1, cy1, cx2, cy2
 
 
 def _cxcywh_norm_to_xyxy(box: list | tuple, width: int, height: int) -> Optional[tuple[int, int, int, int]]:
@@ -2123,10 +2300,11 @@ def segment_with_sam3(
     output_dir: str,
     text_prompts: str = "icon",
     min_score: float = 0.5,
-    merge_threshold: float = 0.9,
+    merge_threshold: float = DEFAULT_MERGE_THRESHOLD,
     sam_backend: Literal["local", "fal", "roboflow", "api"] = "local",
     sam_api_key: Optional[str] = None,
     sam_max_masks: int = 32,
+    max_detection_area_ratio: float = DEFAULT_MAX_DETECTION_AREA_RATIO,
 ) -> tuple[str, str, list]:
     """
     使用 SAM3 分割图片，用灰色填充+黑色边框+序号标记，生成 boxlib.json
@@ -2141,7 +2319,10 @@ def segment_with_sam3(
         output_dir: 输出目录
         text_prompts: SAM3 文本提示，支持逗号分隔的多个prompt（如 "icon,diagram,arrow"）
         min_score: 最低置信度阈值
-        merge_threshold: Box合并阈值，重叠比例超过此值则合并（0表示不合并，默认0.9）
+        merge_threshold: Box合并阈值，IoU/包含比例超过此值则合并
+            （0表示不合并，默认 0.85）
+        max_detection_area_ratio: 单框面积占整图上限，超过则丢弃
+            （0表示不过滤，默认 0.25）
 
     Returns:
         (samed_path, boxlib_path, valid_boxes)
@@ -2327,7 +2508,16 @@ def segment_with_sam3(
                 for box, score in zip(boxes, scores):
                     score_val = float(score)
                     if score_val >= min_score:
-                        x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+                        # 本地后端此前直接 int() 取整、不做边界收敛，导致越界坐标
+                        # （如 x1=-73）流入 boxlib.json，后续 crop 会被填充黑边。
+                        clamped = _clamp_box_to_image(
+                            box[0], box[1], box[2], box[3],
+                            original_size[0], original_size[1],
+                        )
+                        if clamped is None:
+                            print(f"    跳过: box 越界或为空 {tuple(float(v) for v in box[:4])}")
+                            continue
+                        x1, y1, x2, y2 = clamped
                         all_detected_boxes.append({
                             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
                             "score": score_val,
@@ -2415,6 +2605,32 @@ def segment_with_sam3(
 
     print(f"\n总计检测: {total_detected} 个对象 (来自 {len(prompt_list)} 个 prompts)")
 
+    # === 丢弃覆盖大半张图的噪声框 ===
+    # SAM3 偶发输出一个几乎覆盖全图的低分框（实测 score≈0.07、占图 61%）。
+    # 它不是图标：既会被当成图标裁切出来，也会在合并阶段把邻框吸进去。
+    if max_detection_area_ratio > 0 and all_detected_boxes:
+        figure_area = original_size[0] * original_size[1]
+        area_limit = figure_area * max_detection_area_ratio
+        kept_boxes = []
+        for box_data in all_detected_boxes:
+            box_area = max(0, box_data["x2"] - box_data["x1"]) * max(
+                0, box_data["y2"] - box_data["y1"]
+            )
+            if figure_area > 0 and box_area > area_limit:
+                print(
+                    f"  丢弃超大检测框: "
+                    f"({box_data['x1']}, {box_data['y1']}, {box_data['x2']}, {box_data['y2']}) "
+                    f"占图 {box_area / figure_area:.1%} > {max_detection_area_ratio:.0%}, "
+                    f"score={box_data['score']:.3f}"
+                )
+                continue
+            kept_boxes.append(box_data)
+
+        dropped = len(all_detected_boxes) - len(kept_boxes)
+        if dropped > 0:
+            print(f"  超大框过滤: {len(all_detected_boxes)} -> {len(kept_boxes)} (丢弃 {dropped} 个)")
+        all_detected_boxes = kept_boxes
+
     # 为所有检测到的 boxes 分配临时 id 和 label（用于合并）
     valid_boxes = []
     for i, box_data in enumerate(all_detected_boxes):
@@ -2433,7 +2649,11 @@ def segment_with_sam3(
     if merge_threshold > 0 and len(valid_boxes) > 1:
         print(f"\n  合并重叠的boxes (阈值: {merge_threshold})...")
         original_count = len(valid_boxes)
-        valid_boxes = merge_overlapping_boxes(valid_boxes, merge_threshold)
+        valid_boxes = merge_overlapping_boxes(
+            valid_boxes,
+            merge_threshold,
+            image_size=original_size,
+        )
         merged_count = original_count - len(valid_boxes)
         if merged_count > 0:
             print(f"  合并完成: {original_count} -> {len(valid_boxes)} (合并了 {merged_count} 个)")
@@ -2677,6 +2897,16 @@ def crop_and_remove_background(
         label_clean = label.replace("<", "").replace(">", "")
 
         x1, y1, x2, y2 = box_info["x1"], box_info["y1"], box_info["x2"], box_info["y2"]
+
+        # 兜底收敛：boxlib.json 可能来自旧任务或手工编辑，越界坐标会让
+        # image.crop() 静默填充黑边，再喂给 RMBG 会毁掉该侧的 alpha。
+        clamped = _clamp_box_to_image(x1, y1, x2, y2, image.width, image.height)
+        if clamped is None:
+            print(f"  {label}: 跳过（box 越界或为空: {(x1, y1, x2, y2)}）")
+            continue
+        if clamped != (x1, y1, x2, y2):
+            print(f"  {label}: box 越界已收敛 {(x1, y1, x2, y2)} -> {clamped}")
+        x1, y1, x2, y2 = clamped
 
         cropped = image.crop((x1, y1, x2, y2))
         crop_path = icons_dir / f"icon_{label_clean}.png"
@@ -3716,7 +3946,8 @@ def method_to_svg(
     stop_after: int = 5,
     placeholder_mode: PlaceholderMode = "label",
     optimize_iterations: int = 2,
-    merge_threshold: float = 0.9,
+    merge_threshold: float = DEFAULT_MERGE_THRESHOLD,
+    max_detection_area_ratio: float = DEFAULT_MAX_DETECTION_AREA_RATIO,
     image_size: str = GEMINI_DEFAULT_IMAGE_SIZE,
     enable_upscale: bool = True,
     multimodal_image_scale: float = DEFAULT_MULTIMODAL_IMAGE_SCALE,
@@ -3748,7 +3979,10 @@ def method_to_svg(
             - "box": 传入 boxlib 坐标
             - "label": 灰色填充+黑色边框+序号标签（推荐）
         optimize_iterations: 步骤 4.6 优化迭代次数（0 表示跳过优化）
-        merge_threshold: Box合并阈值，重叠比例超过此值则合并（0表示不合并，默认0.9）
+        merge_threshold: Box合并阈值，IoU/包含比例超过此值则合并
+            （0表示不合并，默认 0.85）
+        max_detection_area_ratio: 单框面积占整图上限，超过则丢弃
+            （0表示不过滤，默认 0.25）
         enable_upscale: 是否在步骤一后自动等比例放大到 4K 长边
         multimodal_image_scale: 发给多模态模型的预览图比例（不改磁盘原图/最终 SVG 画布）
         resume: 从 output_dir 已有产物断点续跑，跳过已完成步骤
@@ -3883,6 +4117,7 @@ def method_to_svg(
     print(f"占位符模式: {placeholder_mode}")
     print(f"优化迭代次数: {optimize_iterations}")
     print(f"Box合并阈值: {merge_threshold}")
+    print(f"单框面积上限: {max_detection_area_ratio:.0%} (超过则丢弃)")
     print(f"4K等比例放大: {'开启' if enable_upscale else '关闭'}")
     print(f"多模态预览缩放: {multimodal_image_scale:g}")
     if resume:
@@ -3946,6 +4181,7 @@ def method_to_svg(
             text_prompts=sam_prompts,
             min_score=min_score,
             merge_threshold=merge_threshold,
+            max_detection_area_ratio=max_detection_area_ratio,
             sam_backend=sam_backend_value,
             sam_api_key=sam_api_key,
             sam_max_masks=sam_max_masks,
@@ -4325,8 +4561,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--merge_threshold",
         type=float,
-        default=0.001,
-        help="Box合并阈值，重叠比例超过此值则合并（0表示不合并，默认: 0.9）"
+        default=DEFAULT_MERGE_THRESHOLD,
+        help=(
+            "Box合并阈值，IoU/包含比例超过此值则合并"
+            f"（0表示不合并，默认: {DEFAULT_MERGE_THRESHOLD:g}）"
+        )
+    )
+    parser.add_argument(
+        "--max_detection_area_ratio",
+        type=float,
+        default=DEFAULT_MAX_DETECTION_AREA_RATIO,
+        help=(
+            "单个检测框面积占整图的上限，超过则丢弃"
+            f"（0表示不过滤，默认: {DEFAULT_MAX_DETECTION_AREA_RATIO:g}）"
+        )
     )
 
     args = parser.parse_args()
@@ -4380,6 +4628,7 @@ if __name__ == "__main__":
         placeholder_mode=args.placeholder_mode,
         optimize_iterations=args.optimize_iterations,
         merge_threshold=args.merge_threshold,
+        max_detection_area_ratio=args.max_detection_area_ratio,
         multimodal_image_scale=args.multimodal_image_scale,
         input_figure_path=args.input_figure_path,
         resume=bool(args.resume or args.start_from is not None),

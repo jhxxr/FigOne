@@ -138,7 +138,11 @@ PYTHON_EXECUTABLE = _resolve_python_executable()
 
 DEFAULT_SAM_PROMPT = "icon,person,robot,animal"
 DEFAULT_PLACEHOLDER_MODE = "label"
-DEFAULT_MERGE_THRESHOLD = 0.01
+DEFAULT_MERGE_THRESHOLD = 0.85
+DEFAULT_MAX_DETECTION_AREA_RATIO = 0.25
+# resume 老任务时，低于该值的持久化 merge_threshold 视为修复前的出厂默认(0.01)，
+# 不予沿用。用户显式传入的值不受此限制。
+LEGACY_MERGE_THRESHOLD_FLOOR = 0.5
 
 
 def _apply_pipeline_model_env(env: dict[str, str]) -> None:
@@ -265,6 +269,7 @@ class RunRequest(BaseModel):
     sam_max_masks: Optional[int] = None
     placeholder_mode: Optional[str] = None
     merge_threshold: Optional[float] = None
+    max_detection_area_ratio: Optional[float] = None
     optimize_iterations: Optional[int] = None
     multimodal_image_scale: Optional[float] = None
     start_from: Optional[int] = None
@@ -389,6 +394,7 @@ def _write_job_settings(output_dir: Path, settings: dict) -> None:
         "sam_max_masks": settings.get("sam_max_masks"),
         "placeholder_mode": settings.get("placeholder_mode"),
         "merge_threshold": settings.get("merge_threshold"),
+        "max_detection_area_ratio": settings.get("max_detection_area_ratio"),
         "optimize_iterations": settings.get("optimize_iterations"),
         "multimodal_image_scale": settings.get("multimodal_image_scale"),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
@@ -653,6 +659,29 @@ def run_job(req: RunRequest) -> JSONResponse:
     if merge_threshold is None:
         merge_threshold = DEFAULT_MERGE_THRESHOLD
 
+    # 老任务的 figone_job_settings.json 里存着 0.01 —— 那是修复前的出厂默认，
+    # 会让重叠 box 雪球式合并成一个覆盖整图的框。resume 老任务时不要replay它。
+    # 用户显式传值（req.merge_threshold）不受影响。
+    if req.merge_threshold is None:
+        try:
+            if 0 < float(merge_threshold) < LEGACY_MERGE_THRESHOLD_FLOOR:
+                print(
+                    f"[settings] 忽略历史 merge_threshold={merge_threshold}"
+                    f"（低于 {LEGACY_MERGE_THRESHOLD_FLOOR}，判定为修复前的默认值），"
+                    f"改用 {DEFAULT_MERGE_THRESHOLD}"
+                )
+                merge_threshold = DEFAULT_MERGE_THRESHOLD
+        except (TypeError, ValueError):
+            merge_threshold = DEFAULT_MERGE_THRESHOLD
+
+    max_detection_area_ratio = _pick(
+        req.max_detection_area_ratio,
+        "max_detection_area_ratio",
+        default=DEFAULT_MAX_DETECTION_AREA_RATIO,
+    )
+    if max_detection_area_ratio is None:
+        max_detection_area_ratio = DEFAULT_MAX_DETECTION_AREA_RATIO
+
     provider = (req.provider or previous_settings.get("provider") or "bianxie").strip() or "bianxie"
     svg_model = _pick(req.svg_model, "svg_model")
     image_provider = _pick(req.image_provider, "image_provider")
@@ -711,6 +740,7 @@ def run_job(req: RunRequest) -> JSONResponse:
     cmd += ["--sam_prompt", sam_prompt]
     cmd += ["--placeholder_mode", placeholder_mode]
     cmd += ["--merge_threshold", str(merge_threshold)]
+    cmd += ["--max_detection_area_ratio", str(max_detection_area_ratio)]
     if sam_backend:
         cmd += ["--sam_backend", sam_backend]
     if req.sam_api_key:
@@ -751,6 +781,7 @@ def run_job(req: RunRequest) -> JSONResponse:
             "sam_max_masks": sam_max_masks,
             "placeholder_mode": placeholder_mode,
             "merge_threshold": merge_threshold,
+            "max_detection_area_ratio": max_detection_area_ratio,
             "optimize_iterations": optimize_iterations,
             "multimodal_image_scale": multimodal_image_scale,
         },
