@@ -63,6 +63,7 @@
           <button class="ghost" id="backToConfigBtn" type="button">Back to Config</button>
           <button class="ghost primary" id="resumeJobBtn" type="button" hidden>Continue from checkpoint</button>
           <button class="ghost primary" id="iconReviewToggleBtn" type="button" hidden>Review icons</button>
+          <button class="ghost primary" id="boxReviewToggleBtn" type="button" hidden>Review boxes</button>
           <a class="ghost topbar-link history-action" id="canvasHistoryBtn" href="/history.html">History</a>
           <button class="ghost" id="logToggle" type="button">Logs</button>
           <div class="lang-switch" data-lang-switch>
@@ -244,6 +245,65 @@
 
               <div class="icon-review-status" id="iconReviewStatus" hidden></div>
               <div class="icon-review-grid" id="iconReviewGrid"></div>
+            </div>
+          </section>
+
+          <section class="icon-review-overlay box-review-overlay" id="boxReviewOverlay" hidden>
+            <div class="icon-review-card box-review-card">
+              <header class="icon-review-header">
+                <div>
+                  <div class="eyebrow" id="boxReviewEyebrow">BOX REVIEW</div>
+                  <h2 class="icon-review-title" id="boxReviewTitle">Review detection boxes</h2>
+                  <p class="icon-review-subtitle" id="boxReviewSubtitle">
+                    Delete false positives, draw missing boxes, drag to adjust. Boxes decide what gets cropped.
+                  </p>
+                </div>
+                <div class="icon-review-header-meta">
+                  <span class="status-badge is-neutral" id="boxReviewBadge">Review</span>
+                  <span class="icon-review-count" id="boxReviewCount">0 boxes</span>
+                </div>
+              </header>
+
+              <div class="icon-review-toolbar">
+                <button type="button" class="ghost" id="boxReviewRefreshBtn">Refresh</button>
+                <button type="button" class="ghost" id="boxReviewDrawBtn">＋ Draw box</button>
+                <button type="button" class="ghost" id="boxReviewDeleteBtn">Delete selected</button>
+                <button type="button" class="ghost" id="boxReviewResetBtn">Reset</button>
+                <button type="button" class="ghost" id="boxReviewSaveBtn">Save</button>
+                <button type="button" class="ghost primary" id="boxReviewContinueBtn">Save &amp; continue</button>
+                <button type="button" class="ghost" id="boxReviewCloseBtn">Hide panel</button>
+              </div>
+
+              <div class="icon-review-status" id="boxReviewStatus" hidden></div>
+              <div class="box-review-body">
+                <div class="box-review-canvas-wrap" id="boxReviewCanvasWrap">
+                  <img id="boxReviewImage" alt="figure" draggable="false" />
+                  <div class="box-review-layer" id="boxReviewLayer"></div>
+                </div>
+                <aside class="box-review-list" id="boxReviewList"></aside>
+              </div>
+            </div>
+          </section>
+
+          <section class="icon-review-overlay" id="stepGateOverlay" hidden>
+            <div class="icon-review-card step-gate-card">
+              <header class="icon-review-header">
+                <div>
+                  <div class="eyebrow" id="stepGateEyebrow">REVIEW GATE</div>
+                  <h2 class="icon-review-title" id="stepGateTitle">Step complete</h2>
+                  <p class="icon-review-subtitle" id="stepGateSubtitle">Confirm before continuing.</p>
+                </div>
+                <div class="icon-review-header-meta">
+                  <span class="status-badge is-neutral" id="stepGateBadge">Review</span>
+                </div>
+              </header>
+              <div class="step-gate-media" id="stepGateMedia"></div>
+              <div class="icon-review-status" id="stepGateStatus" hidden></div>
+              <div class="icon-review-toolbar step-gate-actions">
+                <button type="button" class="ghost" id="stepGateRegenerateBtn">Regenerate</button>
+                <button type="button" class="ghost primary" id="stepGateContinueBtn">Continue</button>
+                <button type="button" class="ghost" id="stepGateCloseBtn">Hide panel</button>
+              </div>
             </div>
           </section>
         </section>

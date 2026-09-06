@@ -3336,3 +3336,228 @@ body[data-page="canvas"] .canvas-main > .fab {
   }
 }
 
+
+/* ===========================================================================
+   人在环路审阅门：门 1/4 通用面板 + 步骤二检测框编辑器 + 审图台增强
+   =========================================================================== */
+
+.icon-review-thumb.is-zoomable {
+  cursor: zoom-in;
+}
+
+.icon-review-thumb.is-zoomable:hover img {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.icon-review-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.icon-review-slider-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.icon-review-slider-value {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 门 1 / 门 4：通用步骤门 --------------------------------------------- */
+
+.step-gate-card {
+  width: min(860px, 100%);
+}
+
+.step-gate-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-tinted);
+  min-height: 200px;
+  max-height: min(52vh, 480px);
+  overflow: auto;
+  margin-bottom: 10px;
+}
+
+.step-gate-figure {
+  max-width: 100%;
+  max-height: min(52vh, 480px);
+  object-fit: contain;
+}
+
+.step-gate-svg {
+  width: 100%;
+  height: min(52vh, 480px);
+  border: 0;
+  background: transparent;
+}
+
+.step-gate-actions {
+  justify-content: flex-end;
+}
+
+/* --- 步骤二：检测框编辑器 ------------------------------------------------ */
+
+.box-review-card {
+  width: min(1280px, 100%);
+}
+
+.box-review-body {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.box-review-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel-tinted);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.box-review-canvas-wrap img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.box-review-canvas-wrap.is-drawing {
+  cursor: crosshair;
+}
+
+.box-review-layer {
+  position: absolute;
+  inset: 0;
+  cursor: default;
+}
+
+.box-review-canvas-wrap.is-drawing .box-review-layer {
+  cursor: crosshair;
+}
+
+.box-rect {
+  position: absolute;
+  border: 2px solid #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  cursor: move;
+}
+
+.box-rect:hover {
+  border-color: #1d4ed8;
+}
+
+.box-rect.is-selected {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.1);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
+}
+
+.box-rect-label {
+  position: absolute;
+  top: -10px;
+  left: -2px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #2563eb;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.box-rect.is-selected .box-rect-label {
+  background: #f97316;
+}
+
+.box-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 2px solid #f97316;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+.box-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.box-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.box-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.box-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+
+.box-review-list {
+  width: 220px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: auto;
+  max-height: min(56vh, 520px);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.box-review-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.box-review-row.is-selected {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.box-review-row-label {
+  font-weight: 700;
+}
+
+.box-review-row-coords {
+  flex: 1;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.box-review-row-delete {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .box-review-body {
+    flex-direction: column;
+  }
+
+  .box-review-list {
+    width: 100%;
+    max-height: 180px;
+  }
+}

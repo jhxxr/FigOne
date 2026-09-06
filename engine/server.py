@@ -23,6 +23,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import figurebox
+
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
@@ -138,11 +140,13 @@ PYTHON_EXECUTABLE = _resolve_python_executable()
 
 DEFAULT_SAM_PROMPT = "icon,person,robot,animal"
 DEFAULT_PLACEHOLDER_MODE = "label"
-DEFAULT_MERGE_THRESHOLD = 0.85
-DEFAULT_MAX_DETECTION_AREA_RATIO = 0.25
-# resume 老任务时，低于该值的持久化 merge_threshold 视为修复前的出厂默认(0.01)，
-# 不予沿用。用户显式传入的值不受此限制。
-LEGACY_MERGE_THRESHOLD_FLOOR = 0.5
+# 与原始 AutoFigure-Edit-main 一致的出厂默认：重叠即合并（交集/较小框面积 >= 0.01），
+# 不做超大框过滤。
+DEFAULT_MERGE_THRESHOLD = 0.01
+DEFAULT_MAX_DETECTION_AREA_RATIO = 0
+# resume 老任务时，低于该值的持久化 merge_threshold 视为历史出厂默认（0.01 或 0.85），
+# 不予沿用、改用当前默认。用户显式传入的值不受此限制。
+LEGACY_MERGE_THRESHOLD_FLOOR = 0.9
 
 
 def _apply_pipeline_model_env(env: dict[str, str]) -> None:
@@ -273,6 +277,9 @@ class RunRequest(BaseModel):
     optimize_iterations: Optional[int] = None
     multimodal_image_scale: Optional[float] = None
     start_from: Optional[int] = None
+    # 审阅模式：each=每步后停（门1-4）；key=关键步停（门2、3，默认）；
+    # none=不停，跑完全程。门仍可在完成后从工具栏打开。
+    review_mode: Optional[str] = None
     # 默认在步骤 3（抠图）后暂停，等用户在画布确认再继续 4/5。
     # 传 5 可恢复旧的一键跑完全程行为。
     stop_after: Optional[int] = None
@@ -298,6 +305,15 @@ class IconRematteRequest(BaseModel):
     prefer_white_key: bool = False
     # True: 重抠时关闭实心填充保护，强制使用模型 alpha
     disable_fill_guard: bool = False
+    # 白底转透明的阈值（ramp）：越大保留越多"接近白"的像素。
+    # None 时用全局默认 24；审图台滑杆传 1-60。
+    white_key_ramp: Optional[float] = None
+
+
+class BoxEditRequest(BaseModel):
+    # 人工编辑后的框列表：[{x1, y1, x2, y2, (score), (prompt)}]
+    # 服务端负责收敛越界、丢弃退化框并重新编号 label。
+    boxes: list[dict] = Field(default_factory=list)
 
 
 JOB_SETTINGS_FILENAME = "figone_job_settings.json"
@@ -308,6 +324,9 @@ DEFAULT_MULTIMODAL_IMAGE_SCALE = 0.5
 # 新任务默认跑到步骤 3 后停下，进入抠图人工确认门。
 DEFAULT_STOP_AFTER = 3
 SVG_RERUN_START_FROM = 4
+# 审阅模式与默认值：key = 关键步（步骤二框编辑 + 步骤三抠图）停。
+REVIEW_MODE_CHOICES = ("each", "key", "none")
+DEFAULT_REVIEW_MODE = "key"
 SVG_ARCHIVE_NAMES = (
     "template.svg",
     "optimized_template.svg",
@@ -557,6 +576,11 @@ def get_history_job(job_id: str) -> JSONResponse:
     item = _build_history_item(job_id)
     if not item:
         raise HTTPException(status_code=404, detail="History job not found")
+    output_dir = _resolve_output_dir(job_id)
+    if output_dir:
+        item["awaiting_gate"] = figurebox.compute_awaiting_gate(output_dir)
+        settings = _load_job_settings(output_dir)
+        item["review_mode"] = settings.get("review_mode") or DEFAULT_REVIEW_MODE
     return JSONResponse(item)
 
 
@@ -604,16 +628,8 @@ def run_job(req: RunRequest) -> JSONResponse:
     if req.stop_after is not None and req.stop_after not in (1, 2, 3, 4, 5):
         raise HTTPException(status_code=400, detail="stop_after must be an integer from 1 to 5")
     svg_only_rerun = bool(resume_job_id and start_from == SVG_RERUN_START_FROM)
-    # 从步骤 4/5 续跑（含 SVG 重跑、审图后继续）默认跑完全程；新任务默认停在步骤 3。
-    if req.stop_after is not None:
-        stop_after = int(req.stop_after)
-    elif start_from is not None and start_from >= 4:
-        stop_after = 5
-    elif resume_job_id and start_from is None:
-        # 裸 resume：接着未完成步骤往下跑，但仍在步骤 3 门控（若还没过）
-        stop_after = 5
-    else:
-        stop_after = DEFAULT_STOP_AFTER
+    # stop_after 的推导移到 review_mode 解析之后（见下方 run_job 中段），
+    # 因为"每步确认/关键步确认"要按审阅模式决定停在哪道门。
 
     if resume_job_id:
         if method_text or input_figure_path:
@@ -698,15 +714,15 @@ def run_job(req: RunRequest) -> JSONResponse:
     if merge_threshold is None:
         merge_threshold = DEFAULT_MERGE_THRESHOLD
 
-    # 老任务的 figone_job_settings.json 里存着 0.01 —— 那是修复前的出厂默认，
-    # 会让重叠 box 雪球式合并成一个覆盖整图的框。resume 老任务时不要replay它。
+    # 历史任务的 figone_job_settings.json 里存着当时的出厂默认（0.01 或 0.85），
+    # UI 并不暴露该参数，持久化值不属于用户选择，resume 时一律改用当前默认。
     # 用户显式传值（req.merge_threshold）不受影响。
     if req.merge_threshold is None:
         try:
             if 0 < float(merge_threshold) < LEGACY_MERGE_THRESHOLD_FLOOR:
                 print(
                     f"[settings] 忽略历史 merge_threshold={merge_threshold}"
-                    f"（低于 {LEGACY_MERGE_THRESHOLD_FLOOR}，判定为修复前的默认值），"
+                    f"（低于 {LEGACY_MERGE_THRESHOLD_FLOOR}，判定为历史出厂默认），"
                     f"改用 {DEFAULT_MERGE_THRESHOLD}"
                 )
                 merge_threshold = DEFAULT_MERGE_THRESHOLD
@@ -720,6 +736,41 @@ def run_job(req: RunRequest) -> JSONResponse:
     )
     if max_detection_area_ratio is None:
         max_detection_area_ratio = DEFAULT_MAX_DETECTION_AREA_RATIO
+
+    review_mode = _pick(req.review_mode, "review_mode", default=DEFAULT_REVIEW_MODE)
+    review_mode = str(review_mode or "").strip().lower()
+    if review_mode not in REVIEW_MODE_CHOICES:
+        review_mode = DEFAULT_REVIEW_MODE
+
+    # stop_after 推导（依赖 review_mode）：
+    # - 显式传值最优先（SVG 重跑、审图台继续都会显式传）
+    # - none：不停，跑完全程
+    # - each：每步后停——新任务停门 1，续跑停在 start_from 对应的门
+    # - key：关键步停——新任务停在步骤 3；start_from<=3 的续跑停在当前步
+    if req.stop_after is not None:
+        stop_after = int(req.stop_after)
+    elif review_mode == "none":
+        stop_after = 5
+    elif review_mode == "each":
+        if start_from is not None:
+            stop_after = start_from
+        elif resume_job_id:
+            # 裸 resume（失败恢复按钮）不带 start_from。若直接取 1，
+            # autofigure2 会因"步骤 1 已完成"而空转退出。按磁盘产物算出
+            # 当前停在的门，停到下一道门。
+            gate = figurebox.compute_awaiting_gate(output_dir)
+            stop_after = gate + 1 if gate is not None and gate < 4 else 5
+        else:
+            stop_after = 1
+    elif resume_job_id and start_from is None:
+        # 裸 resume：接着未完成步骤往下跑，但仍在步骤 3 门控（若还没过）
+        stop_after = 5
+    elif start_from is not None and start_from >= 4:
+        stop_after = 5
+    elif start_from is not None and start_from <= 3:
+        stop_after = start_from
+    else:
+        stop_after = DEFAULT_STOP_AFTER
 
     provider = (req.provider or previous_settings.get("provider") or "bianxie").strip() or "bianxie"
     svg_model = _pick(req.svg_model, "svg_model")
@@ -824,6 +875,7 @@ def run_job(req: RunRequest) -> JSONResponse:
             "max_detection_area_ratio": max_detection_area_ratio,
             "optimize_iterations": optimize_iterations,
             "multimodal_image_scale": multimodal_image_scale,
+            "review_mode": review_mode,
             "stop_after": stop_after,
         },
     )
@@ -871,8 +923,12 @@ def run_job(req: RunRequest) -> JSONResponse:
             "multimodal_image_scale": multimodal_image_scale,
             "start_from": start_from,
             "stop_after": stop_after,
+            "review_mode": review_mode,
             "svg_only_rerun": svg_only_rerun,
             "awaiting_icon_review": bool(stop_after == 3 and not svg_only_rerun),
+            # 响应时点反映的是运行前的磁盘状态；前端在 SSE finished 后
+            # 应拉取 /api/history/{id} 获取最新 awaiting_gate。
+            "awaiting_gate": figurebox.compute_awaiting_gate(output_dir),
         }
     )
 
@@ -1065,6 +1121,15 @@ def post_job_icon_rematte(job_id: str, req: IconRematteRequest) -> JSONResponse:
 
     from autofigure2 import rematte_icons
 
+    white_key_ramp = None
+    if req.white_key_ramp is not None:
+        try:
+            white_key_ramp = float(req.white_key_ramp)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="white_key_ramp 必须是数字")
+        if not (1.0 <= white_key_ramp <= 60.0):
+            raise HTTPException(status_code=400, detail="white_key_ramp 需在 1-60 之间")
+
     rmbg_model = _configured_rmbg_model_path()
     try:
         result = rematte_icons(
@@ -1074,6 +1139,7 @@ def post_job_icon_rematte(job_id: str, req: IconRematteRequest) -> JSONResponse:
             disable_fill_guard=bool(req.disable_fill_guard),
             prefer_original=bool(req.prefer_original),
             prefer_white_key=bool(req.prefer_white_key),
+            white_key_ramp=white_key_ramp,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1085,6 +1151,76 @@ def post_job_icon_rematte(job_id: str, req: IconRematteRequest) -> JSONResponse:
     payload = _load_icon_review_for_job(job_id, output_dir)
     payload["updated"] = result.get("updated") or []
     return JSONResponse(payload)
+
+
+@app.get("/api/jobs/{job_id}/boxes")
+def get_job_boxes(job_id: str) -> JSONResponse:
+    """Return boxlib contents for the step-2 box review editor."""
+    output_dir = _job_output_dir(job_id)
+    if not _nonempty_file(output_dir / figurebox.BOXLIB_FILENAME):
+        raise HTTPException(
+            status_code=404, detail="boxlib.json 不存在（步骤二尚未完成）"
+        )
+    data = figurebox.load_boxlib(output_dir)
+    return JSONResponse(
+        {
+            "job_id": job_id,
+            "image_size": data.get("image_size"),
+            "prompts_used": data.get("prompts_used") or [],
+            "boxes": data.get("boxes") or [],
+            "figure_url": f"/api/artifacts/{job_id}/figure.png",
+            "samed_url": f"/api/artifacts/{job_id}/samed.png",
+            "awaiting_gate": figurebox.compute_awaiting_gate(output_dir),
+        }
+    )
+
+
+@app.put("/api/jobs/{job_id}/boxes")
+def put_job_boxes(job_id: str, req: BoxEditRequest) -> JSONResponse:
+    """Apply manual box edits: rewrite boxlib + redraw samed + reset step-3 artifacts."""
+    _assert_job_idle(job_id)
+    output_dir = _job_output_dir(job_id)
+    try:
+        result = figurebox.apply_manual_box_edits(output_dir, req.boxes)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to apply box edits: {exc}"
+        ) from exc
+
+    return JSONResponse(
+        {
+            **result,
+            "job_id": job_id,
+            "awaiting_gate": figurebox.compute_awaiting_gate(output_dir),
+        }
+    )
+
+
+@app.delete("/api/jobs/{job_id}/boxes/{label}")
+def delete_job_box(job_id: str, label: str) -> JSONResponse:
+    """Remove one box (icon review 'false positive' action). Keeps other labels intact."""
+    _assert_job_idle(job_id)
+    output_dir = _job_output_dir(job_id)
+    try:
+        result = figurebox.delete_box(output_dir, label)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete box: {exc}"
+        ) from exc
+
+    return JSONResponse(
+        {
+            **result,
+            "job_id": job_id,
+            "awaiting_gate": figurebox.compute_awaiting_gate(output_dir),
+        }
+    )
 
 
 @app.post("/api/upload")

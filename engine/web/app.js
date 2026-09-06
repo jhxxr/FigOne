@@ -151,6 +151,12 @@
         sam_prompt_label: "SAM Prompt",
         sam_api_key_label: "SAM3 API Key",
         sam_api_key_placeholder: "FAL/Roboflow API key",
+        review_mode_label: "Review Mode",
+        review_mode_hint:
+          "Key steps: pause after segmentation and matting for manual review. Every step: also review figure and SVG template. Run to completion: no pauses.",
+        review_mode_key: "Key steps (recommended)",
+        review_mode_each: "Every step",
+        review_mode_none: "Run to completion",
         reference_image_label: "Reference Image",
         reference_upload_text: "Drop image here or click to upload",
         confirm_btn: "Confirm -> Canvas",
@@ -415,6 +421,44 @@
         icon_review_gate_title: "Step 3 complete — review cutouts",
         icon_review_gate_body:
           "Pipeline paused after icon matting. Approve cutouts to rebuild the SVG, or fix weak icons first.",
+        icon_review_zoom_hint: "Click to zoom",
+        icon_review_slider_label: "White-key strength",
+        icon_review_delete_box: "False positive? Remove",
+        icon_review_box_deleted: "Removed box {label}.",
+        box_review_toggle: "Review boxes",
+        box_review_eyebrow: "BOX REVIEW",
+        box_review_title: "Review detection boxes",
+        box_review_subtitle:
+          "These boxes decide what gets cropped. Delete false positives, drag to adjust, draw missing boxes — then save.",
+        box_review_badge: "Boxes",
+        box_review_count: "{count} boxes",
+        box_review_draw: "＋ Draw box",
+        box_review_delete: "Delete selected",
+        box_review_reset: "Reset",
+        box_review_save: "Save",
+        box_review_save_continue: "Save & continue",
+        box_review_empty: "No boxes. Draw one with ＋ Draw box, or continue without icons.",
+        box_review_loading: "Loading boxes...",
+        box_review_saving: "Saving...",
+        box_review_saved: "Saved. {count} box(es) on disk.",
+        box_review_failed: "Box review failed",
+        gate_eyebrow: "REVIEW GATE",
+        gate_status_1: "Step 1 complete — review figure",
+        gate_status_2: "Step 2 complete — review boxes",
+        gate_status_4: "Step 4 complete — review template",
+        gate_title_1: "Review generated figure",
+        gate_body_1:
+          "This figure drives everything downstream. If it looks wrong, regenerate now; otherwise continue to segmentation.",
+        gate_continue_1: "Continue to step 2",
+        gate_regenerate_1: "Regenerate figure",
+        gate_title_2: "Review detection boxes",
+        gate_body_2:
+          "Delete false positives, draw missing icons, adjust edges — saved boxes re-crop in step 3.",
+        gate_title_4: "Review SVG template",
+        gate_body_4:
+          "Check placeholder layout before icons are embedded. Regenerate or continue to the final assembly.",
+        gate_continue_4: "Continue to step 5",
+        gate_regenerate_4: "Regenerate template",
         svg_rerun_label: "SVG preview",
         svg_rerun_model_label: "SVG model",
         svg_rerun_model_title:
@@ -457,6 +501,9 @@
           stage_rmbg: "Step 3: Cropping icons and removing backgrounds...",
           stage_icons_ready: "Step 3: Icons ready — waiting for cutout review",
           stage_icon_review: "Step 3: Review and refine icon cutouts before SVG rebuild",
+          stage_gate_1: "Figure ready — awaiting review",
+          stage_gate_2: "Boxes ready — awaiting review",
+          stage_gate_4: "Template ready — awaiting review",
           stage_svg_build: "Step 4: Multimodal model reconstructing SVG structure...",
           stage_svg_optimize: "Step 4.6: Validating and optimizing SVG layout...",
           stage_svg_align: "Step 4.7: Aligning coordinate systems...",
@@ -573,6 +620,12 @@
         sam_prompt_label: "SAM Prompt",
         sam_api_key_label: "SAM3 API Key",
         sam_api_key_placeholder: "FAL/Roboflow API key",
+        review_mode_label: "审阅模式",
+        review_mode_hint:
+          "关键步：分割与抠图后暂停等人工确认。每步：生图、分割、抠图、模板后都停。直接完成：全程不停。",
+        review_mode_key: "关键步确认（推荐）",
+        review_mode_each: "每步确认",
+        review_mode_none: "直接完成",
         reference_image_label: "参考图片",
         reference_upload_text: "拖拽图片到这里，或点击上传",
         confirm_btn: "确认并进入画布",
@@ -833,6 +886,43 @@
         icon_review_gate_title: "步骤 3 完成 — 请确认抠图",
         icon_review_gate_body:
           "流水线已在抠图后暂停。确认抠图效果后再重建 SVG；效果差的可先单张修正。",
+        icon_review_zoom_hint: "点击放大",
+        icon_review_slider_label: "白键强度",
+        icon_review_delete_box: "误检？删除此框",
+        icon_review_box_deleted: "已删除 {label} 对应的框。",
+        box_review_toggle: "审阅检测框",
+        box_review_eyebrow: "检测框审阅",
+        box_review_title: "审阅 SAM3 检测框",
+        box_review_subtitle:
+          "这些框决定裁切什么。删除误检框、拖拽调整边缘、画出漏检的图标，然后保存。",
+        box_review_badge: "检测框",
+        box_review_count: "{count} 个框",
+        box_review_draw: "＋ 画框",
+        box_review_delete: "删除选中",
+        box_review_reset: "还原",
+        box_review_save: "保存",
+        box_review_save_continue: "保存并继续",
+        box_review_empty: "还没有检测框。用「＋ 画框」手动补框，或直接继续。",
+        box_review_loading: "正在读取检测框…",
+        box_review_saving: "保存中…",
+        box_review_saved: "已保存，当前共 {count} 个框。",
+        box_review_failed: "框编辑失败",
+        gate_eyebrow: "人工审阅门",
+        gate_status_1: "步骤 1 完成 — 请审阅生图",
+        gate_status_2: "步骤 2 完成 — 请审阅检测框",
+        gate_status_4: "步骤 4 完成 — 请审阅模板",
+        gate_title_1: "审阅生成的图",
+        gate_body_1:
+          "这张图决定后续所有步骤的效果。不满意就重新生成；确认无误后进入分割。",
+        gate_continue_1: "继续步骤二",
+        gate_regenerate_1: "重新生图",
+        gate_title_2: "审阅检测框",
+        gate_body_2:
+          "删除误检框、补画漏检图标、调整边缘——保存后步骤三会按新框重新裁切抠图。",
+        gate_title_4: "审阅 SVG 模板",
+        gate_body_4: "在图标嵌入前检查占位布局。可重新生成模板，或继续最终合成。",
+        gate_continue_4: "继续步骤五",
+        gate_regenerate_4: "重新生成模板",
         svg_rerun_label: "SVG 预览比例",
         svg_rerun_model_label: "SVG 模型",
         svg_rerun_model_title:
@@ -875,6 +965,9 @@
           stage_rmbg: "步骤 3: 正在裁切图元并调用 RMBG-2.0 透明化去背景...",
           stage_icons_ready: "步骤 3: 图元处理完成 — 等待抠图确认",
           stage_icon_review: "步骤 3: 请审阅并修正抠图，确认后再重建 SVG",
+          stage_gate_1: "生图完成，等待人工确认",
+          stage_gate_2: "分割完成，等待框审阅",
+          stage_gate_4: "模板完成，等待人工确认",
           stage_svg_build: "步骤 4: 多模态模型正在重构矢量 SVG 结构与代码...",
           stage_svg_optimize: "步骤 4.6: 正在对 SVG 矢量代码进行语法验证与布局优化...",
           stage_svg_align: "步骤 4.7: 正在进行坐标系对齐...",
@@ -1538,6 +1631,7 @@
     const samPrompt = $("samPrompt");
     const samApiKeyGroup = $("samApiKeyGroup");
     const samApiKeyInput = $("samApiKey");
+    const reviewModeInput = $("reviewMode");
     let uploadedReferencePath = null;
     let activeProfile = null;
 
@@ -1571,6 +1665,7 @@
         upscaleEnabled: upscaleEnabled?.checked ?? true,
         samBackend: samBackend?.value ?? "local",
         samPrompt: samPrompt?.value ?? "icon,person,robot,animal",
+        reviewMode: reviewModeInput?.value ?? "key",
         referencePath: uploadedReferencePath,
         referenceUrl: referencePreview?.src ?? "",
         referenceStatus: referenceStatus?.textContent ?? "",
@@ -1608,6 +1703,9 @@
       }
       if (typeof state.samPrompt === "string" && samPrompt) {
         samPrompt.value = state.samPrompt;
+      }
+      if (typeof state.reviewMode === "string" && reviewModeInput) {
+        reviewModeInput.value = state.reviewMode;
       }
       if (typeof state.referencePath === "string" && state.referencePath) {
         uploadedReferencePath = state.referencePath;
@@ -1817,6 +1915,14 @@
       setText("samPromptLabel", t("input.sam_prompt_label"));
       setText("samApiKeyLabel", t("input.sam_api_key_label"));
       setPlaceholder("samApiKey", t("input.sam_api_key_placeholder"));
+      setText("reviewModeLabel", t("input.review_mode_label"));
+      setText("reviewModeHint", t("input.review_mode_hint"));
+      const reviewModeOptions = document.querySelectorAll("#reviewMode option");
+      if (reviewModeOptions.length === 3) {
+        reviewModeOptions[0].textContent = t("input.review_mode_key");
+        reviewModeOptions[1].textContent = t("input.review_mode_each");
+        reviewModeOptions[2].textContent = t("input.review_mode_none");
+      }
       setText("referenceImageLabel", t("input.reference_image_label"));
       setText("referenceUploadText", t("input.reference_upload_text"));
       if (!confirmBtn.disabled) {
@@ -1960,6 +2066,7 @@
         sam_backend: $("samBackend").value,
         sam_prompt: $("samPrompt").value.trim() || null,
         sam_api_key: $("samApiKey").value.trim() || null,
+        review_mode: $("reviewMode")?.value || "key",
       };
       if (effectiveImageProvider === "gemini") {
         payload.image_size = imageSizeInput?.value || "4K";
@@ -3307,6 +3414,30 @@
     const iconReviewRematteAllBtn = $("iconReviewRematteAllBtn");
     const iconReviewApproveBtn = $("iconReviewApproveBtn");
     const iconReviewCloseBtn = $("iconReviewCloseBtn");
+    const boxReviewToggleBtn = $("boxReviewToggleBtn");
+    const boxReviewOverlay = $("boxReviewOverlay");
+    const boxReviewImage = $("boxReviewImage");
+    const boxReviewLayer = $("boxReviewLayer");
+    const boxReviewWrap = $("boxReviewCanvasWrap");
+    const boxReviewList = $("boxReviewList");
+    const boxReviewStatus = $("boxReviewStatus");
+    const boxReviewBadge = $("boxReviewBadge");
+    const boxReviewCount = $("boxReviewCount");
+    const boxReviewRefreshBtn = $("boxReviewRefreshBtn");
+    const boxReviewDrawBtn = $("boxReviewDrawBtn");
+    const boxReviewDeleteBtn = $("boxReviewDeleteBtn");
+    const boxReviewResetBtn = $("boxReviewResetBtn");
+    const boxReviewSaveBtn = $("boxReviewSaveBtn");
+    const boxReviewContinueBtn = $("boxReviewContinueBtn");
+    const boxReviewCloseBtn = $("boxReviewCloseBtn");
+    const stepGateOverlay = $("stepGateOverlay");
+    const stepGateMedia = $("stepGateMedia");
+    const stepGateStatus = $("stepGateStatus");
+    const stepGateTitle = $("stepGateTitle");
+    const stepGateSubtitle = $("stepGateSubtitle");
+    const stepGateRegenerateBtn = $("stepGateRegenerateBtn");
+    const stepGateContinueBtn = $("stepGateContinueBtn");
+    const stepGateCloseBtn = $("stepGateCloseBtn");
     const regenerateSvgBtn = $("regenerateSvgBtn");
     const svgRerunControls = $("svgRerunControls");
     const canvasMultimodalImageScale = $("canvasMultimodalImageScale");
@@ -3330,6 +3461,14 @@
     let iconReviewState = null;
     let iconReviewBusy = false;
     let iconReviewChoices = {};
+    // 框编辑器（步骤二门）与通用步骤门（门 1/4）状态
+    let boxReviewState = null; // { imageW, imageH, figureUrl, boxes(on-disk) }
+    let boxEdits = []; // working copy of [{x1,y1,x2,y2}]
+    let boxSelectedId = -1;
+    let boxDrawMode = false;
+    let boxBusy = false;
+    let stepGateCurrent = 0; // 1 | 4 when the generic gate overlay is open
+    let currentReviewMode = "key"; // refreshed from /api/history detail
 
     if (!jobId) {
       statusText.textContent = t("canvas.missing_job");
@@ -3441,6 +3580,28 @@
       if (iconReviewCloseBtn) iconReviewCloseBtn.textContent = t("canvas.icon_review_close");
       if (iconReviewState) {
         renderIconReview(iconReviewState);
+      }
+      if (boxReviewToggleBtn) {
+        boxReviewToggleBtn.textContent = t("canvas.box_review_toggle");
+      }
+      setText("boxReviewEyebrow", t("canvas.box_review_eyebrow"));
+      setText("boxReviewTitle", t("canvas.box_review_title"));
+      setText("boxReviewSubtitle", t("canvas.box_review_subtitle"));
+      if (boxReviewRefreshBtn) boxReviewRefreshBtn.textContent = t("canvas.icon_review_refresh");
+      if (boxReviewDrawBtn) boxReviewDrawBtn.textContent = t("canvas.box_review_draw");
+      if (boxReviewDeleteBtn) boxReviewDeleteBtn.textContent = t("canvas.box_review_delete");
+      if (boxReviewResetBtn) boxReviewResetBtn.textContent = t("canvas.box_review_reset");
+      if (boxReviewSaveBtn) boxReviewSaveBtn.textContent = t("canvas.box_review_save");
+      if (boxReviewContinueBtn) {
+        boxReviewContinueBtn.textContent = t("canvas.box_review_save_continue");
+      }
+      if (boxReviewCloseBtn) boxReviewCloseBtn.textContent = t("canvas.icon_review_close");
+      if (boxReviewState) {
+        renderBoxEditor();
+      }
+      setText("stepGateEyebrow", t("canvas.gate_eyebrow"));
+      if (stepGateCurrent) {
+        fillStepGate(stepGateCurrent);
       }
       if (regenerateSvgBtn) {
         regenerateSvgBtn.textContent = t("canvas.svg_rerun_btn");
@@ -4130,6 +4291,92 @@
         if (action === "rematte_force") {
           void rematteIconsRequest([label], { disableFillGuard: true });
         }
+        if (action === "delete_box") {
+          void deleteIconBox(label);
+        }
+      });
+      iconReviewGrid.addEventListener("change", (event) => {
+        const slider = event.target?.closest?.("[data-white-key-ramp]");
+        if (!slider) return;
+        const label = slider.getAttribute("data-white-key-ramp") || "";
+        if (!label) return;
+        const ramp = Number(slider.value);
+        if (!Number.isFinite(ramp)) return;
+        void rematteIconsRequest([label], { preferWhiteKey: true, whiteKeyRamp: ramp });
+      });
+    }
+    if (boxReviewToggleBtn) {
+      boxReviewToggleBtn.addEventListener("click", () => {
+        void refreshBoxReview({ open: true });
+      });
+    }
+    if (boxReviewRefreshBtn) {
+      boxReviewRefreshBtn.addEventListener("click", () => {
+        void refreshBoxReview();
+      });
+    }
+    if (boxReviewDrawBtn) {
+      boxReviewDrawBtn.addEventListener("click", () => {
+        boxDrawMode = !boxDrawMode;
+        if (boxReviewWrap) boxReviewWrap.classList.toggle("is-drawing", boxDrawMode);
+        syncBoxToolbar();
+      });
+    }
+    if (boxReviewDeleteBtn) {
+      boxReviewDeleteBtn.addEventListener("click", () => {
+        deleteSelectedBox();
+      });
+    }
+    if (boxReviewResetBtn) {
+      boxReviewResetBtn.addEventListener("click", () => {
+        if (!boxReviewState) return;
+        boxEdits = boxReviewState.onDisk.map((b) => ({ ...b }));
+        boxSelectedId = -1;
+        renderBoxEditor();
+        setBoxReviewStatus("");
+      });
+    }
+    if (boxReviewSaveBtn) {
+      boxReviewSaveBtn.addEventListener("click", () => {
+        void saveBoxEdits();
+      });
+    }
+    if (boxReviewContinueBtn) {
+      boxReviewContinueBtn.addEventListener("click", () => {
+        void saveBoxEditsAndContinue();
+      });
+    }
+    if (boxReviewCloseBtn) {
+      boxReviewCloseBtn.addEventListener("click", () => {
+        setBoxReviewOpen(false);
+      });
+    }
+    if (boxReviewLayer) {
+      boxReviewLayer.addEventListener("pointerdown", onBoxLayerPointerDown);
+      boxReviewLayer.addEventListener("dragstart", (event) => event.preventDefault());
+    }
+    document.addEventListener("keydown", (event) => {
+      if (!boxReviewOverlay || boxReviewOverlay.hidden) return;
+      const tag = document.activeElement?.tagName || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((event.key === "Delete" || event.key === "Backspace") && boxSelectedId >= 0) {
+        event.preventDefault();
+        deleteSelectedBox();
+      }
+    });
+    if (stepGateContinueBtn) {
+      stepGateContinueBtn.addEventListener("click", () => {
+        void continueCurrentGate();
+      });
+    }
+    if (stepGateRegenerateBtn) {
+      stepGateRegenerateBtn.addEventListener("click", () => {
+        void regenerateCurrentGate();
+      });
+    }
+    if (stepGateCloseBtn) {
+      stepGateCloseBtn.addEventListener("click", () => {
+        setStepGateOpen(false);
       });
     }
     if (regenerateSvgBtn) {
@@ -4301,8 +4548,8 @@
           updateResumeButtonVisibility();
           updateSvgRerunControls();
         } else {
-          // Successful stop may be the step-3 review gate, not full completion.
-          const enteredReview = await maybeEnterIconReviewGate();
+          // Successful stop may be a review gate (figure / boxes / icons / template), not full completion.
+          const enteredReview = await maybeEnterStepGate();
           if (!enteredReview) {
             statusState = "done";
             statusText.textContent = t("canvas.done");
@@ -4312,6 +4559,7 @@
             if (resumeJobBtn) resumeJobBtn.hidden = true;
             updateSvgRerunControls();
             updateIconReviewVisibility();
+            updateBoxReviewVisibility();
             // Auto minimize overlay after completion with smooth delay
             setTimeout(() => {
               if (pipelineOverlay && statusState === "done") {
@@ -4481,8 +4729,11 @@
     function setIconReviewOpen(open) {
       if (!iconReviewOverlay) return;
       iconReviewOverlay.hidden = !open;
-      if (open && pipelineOverlay) {
-        pipelineOverlay.classList.add("is-hidden");
+      if (open) {
+        // 三个审阅 overlay 互斥，避免叠着开
+        if (boxReviewOverlay) boxReviewOverlay.hidden = true;
+        if (stepGateOverlay) stepGateOverlay.hidden = true;
+        if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
       }
     }
 
@@ -4625,22 +4876,38 @@
         pair.className = "icon-review-pair";
 
         const cropBox = document.createElement("figure");
-        cropBox.className = "icon-review-thumb";
+        cropBox.className = "icon-review-thumb is-zoomable";
+        cropBox.title = t("canvas.icon_review_zoom_hint");
         const cropCap = document.createElement("figcaption");
         cropCap.textContent = t("canvas.icon_review_crop");
         const cropImg = document.createElement("img");
         cropImg.alt = `${label} crop`;
         cropImg.src = cacheBust(engineUrl(icon.crop_url));
         cropBox.append(cropCap, cropImg);
+        cropBox.addEventListener("click", () => {
+          openArtifactLightbox({
+            url: icon.crop_url,
+            name: `${label} · ${t("canvas.icon_review_crop")}`,
+            kind: "image",
+          });
+        });
 
         const nobgBox = document.createElement("figure");
-        nobgBox.className = "icon-review-thumb is-checker";
+        nobgBox.className = "icon-review-thumb is-checker is-zoomable";
+        nobgBox.title = t("canvas.icon_review_zoom_hint");
         const nobgCap = document.createElement("figcaption");
         nobgCap.textContent = t("canvas.icon_review_cutout");
         const nobgImg = document.createElement("img");
         nobgImg.alt = `${label} cutout`;
         nobgImg.src = cacheBust(engineUrl(icon.nobg_url));
         nobgBox.append(nobgCap, nobgImg);
+        nobgBox.addEventListener("click", () => {
+          openArtifactLightbox({
+            url: icon.nobg_url,
+            name: `${label} · ${t("canvas.icon_review_cutout")}`,
+            kind: "image",
+          });
+        });
 
         pair.append(cropBox, nobgBox);
 
@@ -4679,10 +4946,34 @@
             primary: choice === "original",
           }),
           mkBtn("rematte", t("canvas.icon_review_rematte")),
-          mkBtn("rematte_force", t("canvas.icon_review_rematte_force"))
+          mkBtn("rematte_force", t("canvas.icon_review_rematte_force")),
+          mkBtn("delete_box", t("canvas.icon_review_delete_box"))
         );
 
-        card.append(head, pair, meta, actions);
+        // 白键阈值滑杆：选择 white_key 时手动微调"多接近白算背景"。
+        const sliderRow = document.createElement("div");
+        sliderRow.className = "icon-review-slider-row";
+        const sliderLabel = document.createElement("span");
+        sliderLabel.className = "icon-review-slider-label";
+        sliderLabel.textContent = t("canvas.icon_review_slider_label");
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "4";
+        slider.max = "60";
+        slider.step = "1";
+        const rampValue = Number(icon.white_key_ramp);
+        slider.value = String(Number.isFinite(rampValue) && rampValue > 0 ? rampValue : 24);
+        slider.dataset.whiteKeyRamp = label;
+        slider.disabled = iconReviewBusy;
+        const sliderValue = document.createElement("span");
+        sliderValue.className = "icon-review-slider-value";
+        sliderValue.textContent = slider.value;
+        slider.addEventListener("input", () => {
+          sliderValue.textContent = slider.value;
+        });
+        sliderRow.append(sliderLabel, slider, sliderValue);
+
+        card.append(head, pair, meta, actions, sliderRow);
         iconReviewGrid.appendChild(card);
       }
 
@@ -4732,16 +5023,20 @@
       }
     }
 
-    async function maybeEnterIconReviewGate() {
+    async function maybeEnterIconReviewGate({ force = false } = {}) {
       // Only treat a successful stop as the review gate when icons exist and SVG does not.
-      if (hasArtifactKind("final_svg") || hasArtifactKind("template_svg")) {
-        return false;
-      }
-      if (!(hasArtifactKind("icon_nobg") || hasArtifactKind("icon_raw") || hasArtifactKind("icon_review"))) {
-        return false;
+      // force=True：server 已判定停在门 3（如用户删光了框、icons=0），
+      // 跳过产物检查直接开门，否则零图标任务会被误判为"完成"。
+      if (!force) {
+        if (hasArtifactKind("final_svg") || hasArtifactKind("template_svg")) {
+          return false;
+        }
+        if (!(hasArtifactKind("icon_nobg") || hasArtifactKind("icon_raw") || hasArtifactKind("icon_review"))) {
+          return false;
+        }
       }
       const payload = await refreshIconReview({ silent: true, open: true });
-      if (!payload || !isAwaitingIconReview(payload)) {
+      if (!force && (!payload || !isAwaitingIconReview(payload))) {
         return false;
       }
       statusState = "review";
@@ -4755,6 +5050,557 @@
       updateSvgRerunControls();
       updateIconReviewVisibility();
       return true;
+    }
+
+    // ======================================================================
+    // 泛化的人工审阅门（门 1 生图 / 门 2 检测框 / 门 4 模板；门 3 见上）
+    // ======================================================================
+
+    let currentGate = 0;
+    const STEP_GATE_PROGRESS = { 1: [1, 15], 4: [4, 80] };
+
+    async function fetchJobGateInfo() {
+      try {
+        const response = await engineFetch(`/api/history/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return null;
+        const payload = await response.json();
+        if (payload?.review_mode) currentReviewMode = String(payload.review_mode);
+        return Number.isFinite(Number(payload?.awaiting_gate))
+          ? Number(payload.awaiting_gate)
+          : null;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function enterGateState(gate, step, percent) {
+      currentGate = gate;
+      statusState = "review";
+      statusText.textContent = t(`canvas.gate_status_${gate}`);
+      applyPipelineBadge();
+      updatePipelineProgress(step, percent, t(`canvas.pipeline.stage_gate_${gate}`));
+      if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+      if (resumeJobBtn) resumeJobBtn.hidden = true;
+      updateSvgRerunControls();
+      updateIconReviewVisibility();
+      updateBoxReviewVisibility();
+    }
+
+    async function maybeEnterStepGate() {
+      if (hasArtifactKind("final_svg")) return false;
+      const gate = await fetchJobGateInfo();
+      if (!gate) return false;
+      if (gate === 3) return maybeEnterIconReviewGate({ force: true });
+      if (gate === 2) return openBoxReviewGate();
+      if (gate === 1 || gate === 4) return openStepGate(gate);
+      return false;
+    }
+
+    // 统一的"继续下一步"入口：取 provider profile → POST /api/run → 整页跳转重挂 SSE。
+    // start_from 与 review_mode 决定 server 的 stop_after 推导（见 server.run_job）。
+    async function continuePipelineFrom(startFrom, { requireKey = true, report = null } = {}) {
+      const say = typeof report === "function" ? report : () => {};
+      try {
+        let profile = null;
+        try {
+          profile = await getActiveProviderProfile();
+        } catch (_err) {
+          profile = null;
+        }
+        if (requireKey && (!profile || !profileHasApiKey(profile))) {
+          throw new Error(t("canvas.resume_need_profile"));
+        }
+        const provider = profile?.provider || "custom";
+        const selectedSvgModel =
+          resolveModelChoice(
+            canvasSvgModelSelect,
+            canvasSvgModel,
+            preferredSvgModel || profile?.svgModel || getDefaultSvgModelForProvider(provider)
+          ) || null;
+        if (selectedSvgModel) preferredSvgModel = selectedSvgModel;
+        const payload = {
+          resume_job_id: jobId,
+          start_from: startFrom,
+          review_mode: currentReviewMode || "key",
+          provider,
+          api_key: profile?.apiKey || null,
+          base_url: provider === "custom" ? profile?.baseUrl || null : null,
+          svg_model: selectedSvgModel,
+          multimodal_image_scale: Number(
+            normalizeMultimodalImageScale(
+              canvasMultimodalImageScale?.value || preferredMultimodalScale
+            )
+          ),
+        };
+        const response = await engineFetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await readApiJson(response);
+        const nextJob = data.job_id || jobId;
+        const nextSource = source === "history" ? "import" : source || "input";
+        window.location.href =
+          `/canvas.html?job=${encodeURIComponent(nextJob)}&source=${encodeURIComponent(nextSource)}`;
+      } catch (err) {
+        say(`${t("canvas.box_review_failed")}: ${err?.message || err}`, { isError: true });
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 门 1 / 门 4：通用步骤门面板（figure 预览 / template 预览）
+    // ------------------------------------------------------------------
+
+    function setStepGateOpen(open) {
+      if (!stepGateOverlay) return;
+      stepGateOverlay.hidden = !open;
+      if (open) {
+        // 三个审阅 overlay 互斥，避免叠着开
+        if (iconReviewOverlay) iconReviewOverlay.hidden = true;
+        if (boxReviewOverlay) boxReviewOverlay.hidden = true;
+        if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+      }
+    }
+
+    function setStepGateStatus(message, { isError = false } = {}) {
+      if (!stepGateStatus) return;
+      if (!message) {
+        stepGateStatus.hidden = true;
+        stepGateStatus.textContent = "";
+        stepGateStatus.classList.remove("is-error");
+        return;
+      }
+      stepGateStatus.hidden = false;
+      stepGateStatus.textContent = message;
+      stepGateStatus.classList.toggle("is-error", Boolean(isError));
+    }
+
+    function fillStepGate(gate) {
+      stepGateCurrent = gate;
+      if (stepGateTitle) stepGateTitle.textContent = t(`canvas.gate_title_${gate}`);
+      if (stepGateSubtitle) stepGateSubtitle.textContent = t(`canvas.gate_body_${gate}`);
+      if (stepGateContinueBtn) {
+        stepGateContinueBtn.textContent = t(`canvas.gate_continue_${gate}`);
+      }
+      if (stepGateRegenerateBtn) {
+        stepGateRegenerateBtn.textContent = t(`canvas.gate_regenerate_${gate}`);
+      }
+      if (stepGateMedia) {
+        stepGateMedia.replaceChildren();
+        const artifact =
+          gate === 1 ? "figure.png" : gate === 4 ? "template.svg" : null;
+        if (artifact) {
+          const url = `/api/artifacts/${encodeURIComponent(jobId)}/${artifact}`;
+          if (gate === 4) {
+            const obj = document.createElement("object");
+            obj.className = "step-gate-svg";
+            obj.type = "image/svg+xml";
+            obj.data = cacheBust(url);
+            stepGateMedia.appendChild(obj);
+          } else {
+            const img = document.createElement("img");
+            img.className = "step-gate-figure";
+            img.alt = "figure preview";
+            img.src = cacheBust(url);
+            stepGateMedia.appendChild(img);
+          }
+        }
+      }
+      setStepGateStatus("");
+    }
+
+    async function openStepGate(gate) {
+      fillStepGate(gate);
+      const [step, percent] = STEP_GATE_PROGRESS[gate] || [gate, 50];
+      enterGateState(gate, step, percent);
+      setStepGateOpen(true);
+      return true;
+    }
+
+    async function regenerateCurrentGate() {
+      const gate = stepGateCurrent;
+      if (!gate || boxBusy) return;
+      setStepGateStatus(t("canvas.box_review_saving"));
+      await continuePipelineFrom(gate, { requireKey: true, report: setStepGateStatus });
+    }
+
+    async function continueCurrentGate() {
+      const gate = stepGateCurrent;
+      if (!gate || boxBusy) return;
+      // 只有 start_from=4（重建 SVG 模板）需要 LLM key；
+      // 门 1→2 只需本地 SAM3，门 4→5 只是本地拼装。
+      await continuePipelineFrom(gate + 1, {
+        requireKey: gate + 1 === 4,
+        report: setStepGateStatus,
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // 门 2：检测框编辑器
+    // ------------------------------------------------------------------
+
+    function setBoxReviewOpen(open) {
+      if (!boxReviewOverlay) return;
+      boxReviewOverlay.hidden = !open;
+      if (open) {
+        // 三个审阅 overlay 互斥，避免叠着开
+        if (iconReviewOverlay) iconReviewOverlay.hidden = true;
+        if (stepGateOverlay) stepGateOverlay.hidden = true;
+        if (pipelineOverlay) pipelineOverlay.classList.add("is-hidden");
+      }
+      if (!open) {
+        boxDrawMode = false;
+        boxGesture = null;
+        if (boxReviewWrap) boxReviewWrap.classList.remove("is-drawing");
+      }
+    }
+
+    function setBoxReviewStatus(message, { isError = false } = {}) {
+      if (!boxReviewStatus) return;
+      if (!message) {
+        boxReviewStatus.hidden = true;
+        boxReviewStatus.textContent = "";
+        boxReviewStatus.classList.remove("is-error");
+        return;
+      }
+      boxReviewStatus.hidden = false;
+      boxReviewStatus.textContent = message;
+      boxReviewStatus.classList.toggle("is-error", Boolean(isError));
+    }
+
+    function updateBoxReviewVisibility() {
+      if (!boxReviewToggleBtn) return;
+      const canShow =
+        hasArtifactKind("figure") &&
+        hasArtifactKind("samed") &&
+        statusState !== "running" &&
+        statusState !== "waiting";
+      boxReviewToggleBtn.hidden = !canShow;
+    }
+
+    function normalizeBoxPayload(boxes) {
+      return (boxes || [])
+        .filter((b) => b && Number.isFinite(Number(b.x1)))
+        .map((b) => ({
+          x1: Number(b.x1),
+          y1: Number(b.y1),
+          x2: Number(b.x2),
+          y2: Number(b.y2),
+          label: b.label || "",
+        }));
+    }
+
+    async function refreshBoxReview({ silent = false, open = false } = {}) {
+      if (!silent) setBoxReviewStatus(t("canvas.box_review_loading"));
+      try {
+        const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/boxes`, {
+          cache: "no-store",
+        });
+        const payload = await readApiJson(response);
+        const size = payload.image_size || {};
+        boxReviewState = {
+          imageW: Number(size.width) || 0,
+          imageH: Number(size.height) || 0,
+          figureUrl: payload.figure_url || "",
+          onDisk: normalizeBoxPayload(payload.boxes),
+        };
+        boxEdits = boxReviewState.onDisk.map((b) => ({ ...b }));
+        boxSelectedId = -1;
+        boxDrawMode = false;
+        if (boxReviewWrap) boxReviewWrap.classList.remove("is-drawing");
+        if (boxReviewImage && boxReviewState.figureUrl) {
+          boxReviewImage.src = cacheBust(engineUrl(boxReviewState.figureUrl));
+        }
+        renderBoxEditor();
+        if (!silent) setBoxReviewStatus("");
+        if (open) setBoxReviewOpen(true);
+        return payload;
+      } catch (err) {
+        if (!silent) {
+          setBoxReviewStatus(`${t("canvas.box_review_failed")}: ${err?.message || err}`, {
+            isError: true,
+          });
+        }
+        return null;
+      }
+    }
+
+    async function openBoxReviewGate() {
+      // 先进门态再拉数据：即使 GET /boxes 失败（如 boxlib 异常缺失），
+      // overlay 也会打开并显示错误，而不是被上层误判为"任务已完成"。
+      enterGateState(2, 2, 35);
+      const payload = await refreshBoxReview({ silent: true, open: true });
+      setBoxReviewStatus(payload ? t("canvas.gate_body_2") : t("canvas.box_review_failed"));
+      return true;
+    }
+
+    function boxPct(value, total) {
+      if (!total) return "0%";
+      return `${(value / total) * 100}%`;
+    }
+
+    function renderBoxEditor() {
+      renderBoxCount();
+      renderBoxLayer();
+      renderBoxList();
+      syncBoxToolbar();
+    }
+
+    function renderBoxCount() {
+      if (boxReviewCount) {
+        boxReviewCount.textContent = t("canvas.box_review_count", { count: boxEdits.length });
+      }
+    }
+
+    function syncBoxToolbar() {
+      const busy = boxBusy;
+      [
+        boxReviewRefreshBtn,
+        boxReviewDrawBtn,
+        boxReviewDeleteBtn,
+        boxReviewResetBtn,
+        boxReviewSaveBtn,
+        boxReviewContinueBtn,
+      ].forEach((btn) => {
+        if (btn) btn.disabled = busy;
+      });
+      if (boxReviewDrawBtn) {
+        boxReviewDrawBtn.classList.toggle("is-active", boxDrawMode);
+      }
+      if (boxReviewDeleteBtn) {
+        boxReviewDeleteBtn.disabled = busy || boxSelectedId < 0;
+      }
+    }
+
+    function renderBoxLayer() {
+      if (!boxReviewLayer) return;
+      boxReviewLayer.replaceChildren();
+      if (!boxReviewState) return;
+      boxEdits.forEach((box, index) => {
+        const el = document.createElement("div");
+        el.className = "box-rect" + (index === boxSelectedId ? " is-selected" : "");
+        el.dataset.index = String(index);
+        el.style.left = boxPct(Math.min(box.x1, box.x2), boxReviewState.imageW);
+        el.style.top = boxPct(Math.min(box.y1, box.y2), boxReviewState.imageH);
+        el.style.width = boxPct(Math.abs(box.x2 - box.x1), boxReviewState.imageW);
+        el.style.height = boxPct(Math.abs(box.y2 - box.y1), boxReviewState.imageH);
+        const chip = document.createElement("span");
+        chip.className = "box-rect-label";
+        chip.textContent = box.label || `#${index + 1}`;
+        el.appendChild(chip);
+        for (const corner of ["nw", "ne", "sw", "se"]) {
+          const handle = document.createElement("span");
+          handle.className = `box-handle box-handle-${corner}`;
+          handle.dataset.handle = corner;
+          el.appendChild(handle);
+        }
+        boxReviewLayer.appendChild(el);
+      });
+    }
+
+    function renderBoxList() {
+      if (!boxReviewList) return;
+      boxReviewList.replaceChildren();
+      if (!boxEdits.length) {
+        const empty = document.createElement("div");
+        empty.className = "icon-review-empty";
+        empty.textContent = t("canvas.box_review_empty");
+        boxReviewList.appendChild(empty);
+        return;
+      }
+      boxEdits.forEach((box, index) => {
+        const row = document.createElement("div");
+        row.className = "box-review-row" + (index === boxSelectedId ? " is-selected" : "");
+        const name = document.createElement("span");
+        name.className = "box-review-row-label";
+        name.textContent = box.label || `#${index + 1}`;
+        const coords = document.createElement("span");
+        coords.className = "box-review-row-coords";
+        coords.textContent = `${Math.round(Math.min(box.x1, box.x2))},${Math.round(
+          Math.min(box.y1, box.y2)
+        )} · ${Math.round(Math.abs(box.x2 - box.x1))}×${Math.round(Math.abs(box.y2 - box.y1))}`;
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ghost box-review-row-delete";
+        del.textContent = "✕";
+        del.setAttribute("aria-label", t("canvas.box_review_delete"));
+        del.addEventListener("click", (event) => {
+          event.stopPropagation();
+          boxEdits.splice(index, 1);
+          if (boxSelectedId === index) boxSelectedId = -1;
+          renderBoxEditor();
+        });
+        row.append(name, coords, del);
+        row.addEventListener("click", () => {
+          boxSelectedId = index;
+          renderBoxEditor();
+        });
+        boxReviewList.appendChild(row);
+      });
+    }
+
+    let boxGesture = null;
+
+    function boxEventPoint(event) {
+      if (!boxReviewState || !boxReviewWrap) return null;
+      const rect = boxReviewWrap.getBoundingClientRect();
+      if (!rect.width || !rect.height || !boxReviewState.imageW) return null;
+      const scaleX = boxReviewState.imageW / rect.width;
+      const scaleY = boxReviewState.imageH / rect.height;
+      const clamp = (value, max) => Math.max(0, Math.min(max, value));
+      return {
+        x: clamp((event.clientX - rect.left) * scaleX, boxReviewState.imageW),
+        y: clamp((event.clientY - rect.top) * scaleY, boxReviewState.imageH),
+      };
+    }
+
+    function onBoxLayerPointerDown(event) {
+      if (boxBusy || !boxReviewState || event.button !== 0) return;
+      const point = boxEventPoint(event);
+      if (!point) return;
+      const handle = event.target?.closest?.(".box-handle");
+      const rectEl = event.target?.closest?.(".box-rect");
+      event.preventDefault();
+      if (boxDrawMode && !rectEl) {
+        const box = { x1: point.x, y1: point.y, x2: point.x, y2: point.y, label: "" };
+        boxEdits.push(box);
+        boxSelectedId = boxEdits.length - 1;
+        boxGesture = { type: "create", index: boxSelectedId, start: point };
+        renderBoxLayer();
+      } else if (rectEl) {
+        const index = Number(rectEl.dataset.index);
+        if (!Number.isInteger(index) || !boxEdits[index]) return;
+        boxSelectedId = index;
+        if (handle) {
+          boxGesture = {
+            type: "resize",
+            index,
+            corner: handle.dataset.handle || "se",
+            start: point,
+            orig: { ...boxEdits[index] },
+          };
+        } else {
+          boxGesture = { type: "move", index, start: point, orig: { ...boxEdits[index] } };
+        }
+        renderBoxEditor();
+      } else {
+        if (boxSelectedId !== -1) {
+          boxSelectedId = -1;
+          renderBoxEditor();
+        }
+        return;
+      }
+      window.addEventListener("pointermove", onBoxPointerMove);
+      window.addEventListener("pointerup", onBoxPointerUp);
+    }
+
+    function onBoxPointerMove(event) {
+      if (!boxGesture) return;
+      const point = boxEventPoint(event);
+      if (!point) return;
+      const box = boxEdits[boxGesture.index];
+      if (!box) return;
+      if (boxGesture.type === "create") {
+        box.x2 = point.x;
+        box.y2 = point.y;
+      } else if (boxGesture.type === "move") {
+        const dx = point.x - boxGesture.start.x;
+        const dy = point.y - boxGesture.start.y;
+        box.x1 = boxGesture.orig.x1 + dx;
+        box.y1 = boxGesture.orig.y1 + dy;
+        box.x2 = boxGesture.orig.x2 + dx;
+        box.y2 = boxGesture.orig.y2 + dy;
+      } else if (boxGesture.type === "resize") {
+        const corner = boxGesture.corner;
+        if (corner.includes("w")) box.x1 = point.x;
+        if (corner.includes("e")) box.x2 = point.x;
+        if (corner.includes("n")) box.y1 = point.y;
+        if (corner.includes("s")) box.y2 = point.y;
+      }
+      renderBoxLayer();
+    }
+
+    function onBoxPointerUp() {
+      if (boxGesture) {
+        const box = boxEdits[boxGesture.index];
+        if (box) {
+          let x1 = Math.min(box.x1, box.x2);
+          let x2 = Math.max(box.x1, box.x2);
+          let y1 = Math.min(box.y1, box.y2);
+          let y2 = Math.max(box.y1, box.y2);
+          // 收敛到图内（server 端 apply_manual_box_edits 会再次校验）
+          if (boxReviewState) {
+            x1 = Math.max(0, Math.min(boxReviewState.imageW, x1));
+            x2 = Math.max(0, Math.min(boxReviewState.imageW, x2));
+            y1 = Math.max(0, Math.min(boxReviewState.imageH, y1));
+            y2 = Math.max(0, Math.min(boxReviewState.imageH, y2));
+          }
+          if (boxGesture.type === "create" && (x2 - x1 < 4 || y2 - y1 < 4)) {
+            boxEdits.splice(boxGesture.index, 1);
+            boxSelectedId = -1;
+          } else {
+            box.x1 = x1;
+            box.x2 = x2;
+            box.y1 = y1;
+            box.y2 = y2;
+          }
+        }
+        boxGesture = null;
+        renderBoxEditor();
+      }
+      window.removeEventListener("pointermove", onBoxPointerMove);
+      window.removeEventListener("pointerup", onBoxPointerUp);
+    }
+
+    function deleteSelectedBox() {
+      if (boxBusy || boxSelectedId < 0) return;
+      boxEdits.splice(boxSelectedId, 1);
+      boxSelectedId = -1;
+      renderBoxEditor();
+    }
+
+    async function saveBoxEdits({ silent = false } = {}) {
+      if (boxBusy) return null;
+      boxBusy = true;
+      syncBoxToolbar();
+      if (!silent) setBoxReviewStatus(t("canvas.box_review_saving"));
+      try {
+        const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/boxes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            boxes: boxEdits.map((b) => ({
+              x1: Math.round(Math.min(b.x1, b.x2)),
+              y1: Math.round(Math.min(b.y1, b.y2)),
+              x2: Math.round(Math.max(b.x1, b.x2)),
+              y2: Math.round(Math.max(b.y1, b.y2)),
+            })),
+          }),
+        });
+        const payload = await readApiJson(response);
+        boxReviewState.onDisk = normalizeBoxPayload(payload.boxes);
+        boxEdits = boxReviewState.onDisk.map((b) => ({ ...b }));
+        boxSelectedId = -1;
+        renderBoxEditor();
+        setBoxReviewStatus(t("canvas.box_review_saved", { count: boxEdits.length }));
+        return payload;
+      } catch (err) {
+        setBoxReviewStatus(`${t("canvas.box_review_failed")}: ${err?.message || err}`, {
+          isError: true,
+        });
+        return null;
+      } finally {
+        boxBusy = false;
+        syncBoxToolbar();
+      }
+    }
+
+    async function saveBoxEditsAndContinue() {
+      const saved = await saveBoxEdits({ silent: true });
+      if (!saved) return;
+      await continuePipelineFrom(3, { requireKey: false, report: setBoxReviewStatus });
     }
 
     function setAllIconChoices(choice) {
@@ -4784,7 +5630,10 @@
       return payload;
     }
 
-    async function rematteIconsRequest(labels, { disableFillGuard = false } = {}) {
+    async function rematteIconsRequest(
+      labels,
+      { disableFillGuard = false, preferWhiteKey = false, whiteKeyRamp = null } = {}
+    ) {
       if (iconReviewBusy) return;
       iconReviewBusy = true;
       renderIconReview(iconReviewState);
@@ -4792,14 +5641,19 @@
       try {
         // Persist current choices first so rematte doesn't surprise the user.
         await saveIconChoices();
+        const body = {
+          labels: labels || [],
+          disable_fill_guard: Boolean(disableFillGuard),
+          prefer_original: false,
+          prefer_white_key: Boolean(preferWhiteKey),
+        };
+        if (preferWhiteKey && Number.isFinite(Number(whiteKeyRamp))) {
+          body.white_key_ramp = Number(whiteKeyRamp);
+        }
         const response = await engineFetch(`/api/jobs/${encodeURIComponent(jobId)}/icons/rematte`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            labels: labels || [],
-            disable_fill_guard: Boolean(disableFillGuard),
-            prefer_original: false,
-          }),
+          body: JSON.stringify(body),
         });
         const payload = await readApiJson(response);
         syncIconChoicesFromState(payload);
@@ -4816,6 +5670,30 @@
       }
     }
 
+    async function deleteIconBox(label) {
+      if (iconReviewBusy || !label) return;
+      iconReviewBusy = true;
+      renderIconReview(iconReviewState);
+      setIconReviewStatus(t("canvas.icon_review_status_busy"));
+      try {
+        const response = await engineFetch(
+          `/api/jobs/${encodeURIComponent(jobId)}/boxes/${encodeURIComponent(label)}`,
+          { method: "DELETE" }
+        );
+        await readApiJson(response);
+        delete iconReviewChoices[label];
+        setIconReviewStatus(t("canvas.icon_review_box_deleted", { label }));
+      } catch (err) {
+        setIconReviewStatus(`${t("canvas.icon_review_failed")}: ${err?.message || err}`, {
+          isError: true,
+        });
+      } finally {
+        iconReviewBusy = false;
+        await refreshIconReview({ silent: true });
+        renderIconReview(iconReviewState);
+      }
+    }
+
     async function approveIconReviewAndContinue() {
       if (iconReviewBusy) return;
       iconReviewBusy = true;
@@ -4823,54 +5701,19 @@
       setIconReviewStatus(t("canvas.icon_review_approving"));
       try {
         await saveIconChoices();
-        let profile = null;
-        try {
-          profile = await getActiveProviderProfile();
-        } catch (_err) {
-          profile = null;
-        }
-        if (!profile || !profileHasApiKey(profile)) {
-          throw new Error(t("canvas.resume_need_profile"));
-        }
-        const provider = profile.provider || "custom";
-        const selectedSvgModel =
-          resolveModelChoice(
-            canvasSvgModelSelect,
-            canvasSvgModel,
-            preferredSvgModel || profile.svgModel || getDefaultSvgModelForProvider(provider)
-          ) || null;
-        if (selectedSvgModel) preferredSvgModel = selectedSvgModel;
-        const payload = {
-          resume_job_id: jobId,
-          start_from: 4,
-          stop_after: 5,
-          provider,
-          api_key: profile.apiKey || null,
-          base_url: provider === "custom" ? profile.baseUrl || null : null,
-          svg_model: selectedSvgModel,
-          multimodal_image_scale: Number(
-            normalizeMultimodalImageScale(
-              canvasMultimodalImageScale?.value || preferredMultimodalScale
-            )
-          ),
-        };
-        const response = await engineFetch("/api/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await readApiJson(response);
-        const nextJob = data.job_id || jobId;
-        const nextSource = source === "history" ? "import" : source || "input";
-        window.location.href =
-          `/canvas.html?job=${encodeURIComponent(nextJob)}&source=${encodeURIComponent(nextSource)}`;
       } catch (err) {
         setIconReviewStatus(`${t("canvas.icon_review_failed")}: ${err?.message || err}`, {
           isError: true,
         });
         iconReviewBusy = false;
         renderIconReview(iconReviewState);
+        return;
       }
+      // 选择已落盘；继续动作交给统一的门控入口（start_from=4，
+      // stop_after 由 server 按 review_mode 推导：key → 跑完 4/5，each → 停在门 4）。
+      iconReviewBusy = false;
+      await continuePipelineFrom(4, { requireKey: true, report: setIconReviewStatus });
+      renderIconReview(iconReviewState);
     }
 
     function updateResumeButtonVisibility() {
@@ -5186,8 +6029,23 @@
         currentStep = 0;
         currentPercentage = 0;
         lastPipelineLabel = historyLabel;
-        // Paused after step 3: open the icon review gate instead of plain history.
-        if (awaitingIconsOnly) {
+        // Paused at a review gate: open the matching overlay instead of plain history.
+        // awaiting_gate 覆盖门 1-4；老 server 没有该字段时退回 awaitingIconsOnly（门 3）。
+        const historyGate = Number.isFinite(Number(item?.awaiting_gate))
+          ? Number(item.awaiting_gate)
+          : awaitingIconsOnly
+            ? 3
+            : 0;
+        if (historyGate) {
+          if (item?.review_mode) currentReviewMode = String(item.review_mode);
+          if (historyGate === 2) {
+            void openBoxReviewGate();
+            return true;
+          }
+          if (historyGate === 1 || historyGate === 4) {
+            void openStepGate(historyGate);
+            return true;
+          }
           statusState = "review";
           statusText.textContent = t("canvas.icon_review_gate_title");
           updatePipelineProgress(historyStep, historyPercent, historyLabel);
@@ -5441,6 +6299,7 @@
       "samed",
       "icon_raw",
       "icon_nobg",
+      "image",
       "template_svg",
       "optimized_template_svg",
       "final_svg",

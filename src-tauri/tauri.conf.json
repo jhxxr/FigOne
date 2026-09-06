@@ -18,6 +18,7 @@
     "targets": "all",
     "resources": {
       "../engine/autofigure2.py": "engine/autofigure2.py",
+      "../engine/figurebox.py": "engine/figurebox.py",
       "../engine/server.py": "engine/server.py",
       "../engine/web": "engine/web",
       "../engine/sam3-src/LICENSE": "licenses/sam3-LICENSE.txt",

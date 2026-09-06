@@ -165,6 +165,18 @@
               </div>
             </div>
 
+            <div class="field-group" id="reviewModeGroup">
+              <label class="field-label" id="reviewModeLabel" for="reviewMode">Review Mode</label>
+              <select id="reviewMode" class="input">
+                <option value="key" selected>Key steps (recommended)</option>
+                <option value="each">Every step</option>
+                <option value="none">Run to completion</option>
+              </select>
+              <div class="hint" id="reviewModeHint">
+                Key steps: pause after segmentation and matting for manual review.
+              </div>
+            </div>
+
             <div class="field-group" id="samApiKeyGroup" hidden>
               <label class="field-label" id="samApiKeyLabel" for="samApiKey">SAM3 API Key</label>
               <input

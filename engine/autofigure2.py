@@ -25,10 +25,9 @@ Box合并功能 (--merge_threshold):
 - 两条判据（满足其一即合并）：
   1. IoU = 交集面积 / 并集面积 >= 阈值（两框基本重合，属重复检测）
   2. 包含比例 = 交集面积 / 较小box面积 >= 阈值（小框被大框包住，属子部件）
-- 默认阈值0.85，设为0表示不合并
-- 两道防雪球保护（见 --max_detection_area_ratio）：
-  * 单个原始检测框超过整图 25% 直接丢弃
-  * 合并结果超过整图 25% 则拒绝该次合并
+- 默认阈值0.01（与原始 AutoFigure-Edit-main 一致：有重叠即合并），设为0表示不合并
+- 防雪球保护默认关闭：--max_detection_area_ratio 传正值可丢弃超大检测框；
+  合并面积上限由 DEFAULT_MAX_MERGED_AREA_RATIO 常量控制（默认不限制）
 - 跨prompt检测结果也会自动去重
 
 流程：
@@ -98,6 +97,8 @@ import torch
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from torchvision import transforms
 from transformers import AutoModelForImageSegmentation
+
+import figurebox
 
 
 # ============================================================================
@@ -184,13 +185,14 @@ UPSCALE_TARGET_LONG_EDGE = 3840
 BOXLIB_NO_ICON_MODE_KEY = "no_icon_mode"
 
 # Box 合并参数
-# 重叠判据默认按 IoU 走，0.85 表示"两框基本重合才算重复检测"。
-DEFAULT_MERGE_THRESHOLD = 0.85
-# 单个原始检测框若超过整图这一比例，直接丢弃：SAM3 会偶发输出覆盖大半张图的
-# 低分噪声框（实测 score≈0.07 / 占图 61%），它不是图标，且会污染后续合并。
-DEFAULT_MAX_DETECTION_AREA_RATIO = 0.25
-# 合并后的并集若超过整图这一比例，拒绝该次合并，防止雪球式吞并。
-DEFAULT_MAX_MERGED_AREA_RATIO = 0.25
+# 与原始 AutoFigure-Edit-main 一致：判据为交集/较小框面积（另含 IoU 通道），
+# 0.01 表示"只要有重叠（含嵌套）就并成一块"，这是原始项目的实际行为。
+DEFAULT_MERGE_THRESHOLD = 0.01
+# 单框面积上限（占整图比例），超过则丢弃；0 = 关闭（原始行为）。
+# 如需重新拦截 SAM3 偶发的整图级低分噪声框，可改回 0.25 左右。
+DEFAULT_MAX_DETECTION_AREA_RATIO = 0
+# 合并结果并集的面积上限（占整图比例），超过则拒绝该次合并；1.0 = 不限制（原始行为）。
+DEFAULT_MAX_MERGED_AREA_RATIO = 1.0
 # containment 通道可选的面积相似度门槛：较小框面积 / 较大框面积。
 # 默认 0.0（不启用）——把小图标并进包住它的面板通常正是期望行为，
 # 实测启用该门槛会让嵌套子部件无法归并、框数从 14 涨到 69。
@@ -213,9 +215,9 @@ RMBG_FILL_GUARD_WHITE_DISTANCE = 40.0
 RMBG_FILL_GUARD_NONWHITE_RATIO = 0.5
 # 被判为背景的像素少于该比例时不做判断（几乎没抠掉东西，无从误判）。
 RMBG_FILL_GUARD_MIN_REMOVED_RATIO = 0.02
-# 设 FIGONE_RMBG_FILL_GUARD=0 可整体关闭该保护，退回旧行为。
+# 默认关闭（回退到原始项目的纯 RMBG-2.0 行为）。设 FIGONE_RMBG_FILL_GUARD=1 重新开启。
 RMBG_FILL_GUARD_ENABLED = (
-    os.environ.get("FIGONE_RMBG_FILL_GUARD", "1").strip() != "0"
+    os.environ.get("FIGONE_RMBG_FILL_GUARD", "0").strip() != "0"
 )
 
 # ---------------------------------------------------------------------------
@@ -240,9 +242,9 @@ ICON_BORDER_RING_OUTER = 7
 ICON_BORDER_PRESENT_RATIO = 0.35
 # 有边框却只保住不到该比例，判定边框被抠掉，改用白键重抠。
 ICON_BORDER_KEPT_RATIO = 0.3
-# 设 FIGONE_BORDER_GUARD=0 可关闭边框流失保护。
+# 默认关闭（回退到原始项目行为）。设 FIGONE_BORDER_GUARD=1 重新开启边框流失保护。
 ICON_BORDER_GUARD_ENABLED = (
-    os.environ.get("FIGONE_BORDER_GUARD", "1").strip() != "0"
+    os.environ.get("FIGONE_BORDER_GUARD", "0").strip() != "0"
 )
 
 # 审图台的三种可选贴片来源。白键可由 crop 现场算出，不需要加载模型，
@@ -1744,41 +1746,8 @@ The figure should be engaging and using academic journal style with cute charact
 # 步骤二：SAM3 分割 + Box合并 + 灰色填充+黑色边框+序号标记
 # ============================================================================
 
-def get_label_font(box_width: int, box_height: int) -> ImageFont.FreeTypeFont:
-    """
-    根据 box 尺寸动态计算合适的字体大小
-
-    Args:
-        box_width: 矩形宽度
-        box_height: 矩形高度
-
-    Returns:
-        PIL ImageFont 对象
-    """
-    # 字体大小为 box 短边的 1/4，最小 12，最大 48
-    min_dim = min(box_width, box_height)
-    font_size = max(12, min(48, min_dim // 4))
-
-    # 尝试加载字体
-    font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",  # macOS
-        "C:/Windows/Fonts/arial.ttf",  # Windows
-    ]
-
-    for font_path in font_paths:
-        try:
-            return ImageFont.truetype(font_path, font_size)
-        except (IOError, OSError):
-            continue
-
-    # 回退到默认字体
-    try:
-        return ImageFont.load_default()
-    except:
-        return None
+# samed.png 绘制与 boxlib.json 写入已抽到 figurebox.py（server 的框编辑
+# 保存需要重画同一份产物），segment_with_sam3 尾部直接调用。
 
 
 # ============================================================================
@@ -1945,7 +1914,7 @@ def merge_overlapping_boxes(
 
     Args:
         boxes: box列表，每个box包含 x1, y1, x2, y2, score
-        overlap_threshold: 重叠阈值，超过此值则合并（默认 0.85）
+        overlap_threshold: 重叠阈值，超过此值则合并（默认 0.01，有重叠即合并）
         image_size: (width, height)，用于面积上限判断；为 None 时跳过该保护
         containment_size_ratio: containment 通道要求的最小面积相似度
         max_merged_area_ratio: 合并结果占整图面积的上限
@@ -2402,9 +2371,9 @@ def segment_with_sam3(
         text_prompts: SAM3 文本提示，支持逗号分隔的多个prompt（如 "icon,diagram,arrow"）
         min_score: 最低置信度阈值
         merge_threshold: Box合并阈值，IoU/包含比例超过此值则合并
-            （0表示不合并，默认 0.85）
+            （0表示不合并，默认 0.01）
         max_detection_area_ratio: 单框面积占整图上限，超过则丢弃
-            （0表示不过滤，默认 0.25）
+            （0表示不过滤，默认 0）
 
     Returns:
         (samed_path, boxlib_path, valid_boxes)
@@ -2514,28 +2483,20 @@ def segment_with_sam3(
 
         print(f"build_sam3_image_model kwargs: { {k: v for k, v in build_kwargs.items() if k != 'checkpoint_path' or True} }")
         model = build_sam3_image_model(**build_kwargs)
-        # Sam3Processor filters with its own confidence_threshold (default 0.5)
-        # BEFORE returning boxes. CLI --min_score was only applied afterward, so a
-        # requested floor of 0.0 still yielded empty results whenever raw scores
-        # sat below the processor default (common on CPU / academic figures).
-        #
-        # Sync the processor gate with min_score. When min_score is 0 ("keep
-        # everything"), still use a tiny floor: SAM3 always scores a fixed query
-        # grid, and near-zero tails are noise rather than real icons.
-        if min_score is None:
-            processor_threshold = 0.5
-        else:
-            processor_threshold = float(min_score)
-            if processor_threshold <= 0.0:
-                processor_threshold = 0.05
-        processor_threshold = max(0.0, min(1.0, processor_threshold))
+        # 与原始项目一致：不传 confidence_threshold 时 Sam3Processor 使用自身默认
+        # 门限 0.5，CLI --min_score 只在返回后二次过滤。仅当用户显式给出正的
+        # min_score 时才把它同步进处理器。
+        processor_kwargs = {}
+        if min_score is not None and float(min_score) > 0.0:
+            processor_kwargs["confidence_threshold"] = max(0.0, min(1.0, float(min_score)))
         processor = Sam3Processor(
             model,
             device=device,
-            confidence_threshold=processor_threshold,
+            **processor_kwargs,
         )
+        effective_threshold = processor_kwargs.get("confidence_threshold", 0.5)
         print(
-            f"SAM3 processor confidence_threshold: {processor_threshold} "
+            f"SAM3 processor confidence_threshold: {effective_threshold} "
             f"(from min_score={min_score})"
         )
 
@@ -2746,58 +2707,13 @@ def segment_with_sam3(
         else:
             print(f"  无需合并，所有boxes重叠比例均低于阈值")
 
-    # 使用合并后的 valid_boxes 创建标记图片
+    # 使用合并后的 valid_boxes 写出 samed.png 与 boxlib.json
+    # （绘制逻辑在 figurebox.write_samed_and_boxlib，框编辑保存会重用同一实现）
     print(f"\n  绘制 samed.png (使用 {len(valid_boxes)} 个boxes)...")
-    samed_image = image.copy()
-    draw = ImageDraw.Draw(samed_image)
-
-    for box_info in valid_boxes:
-        x1, y1, x2, y2 = box_info["x1"], box_info["y1"], box_info["x2"], box_info["y2"]
-        label = box_info["label"]
-
-        # 灰色填充 + 黑色边框
-        draw.rectangle([x1, y1, x2, y2], fill="#808080", outline="black", width=3)
-
-        # 计算中心点
-        cx = (x1 + x2) // 2
-        cy = (y1 + y2) // 2
-
-        # 获取合适大小的字体
-        box_width = x2 - x1
-        box_height = y2 - y1
-        font = get_label_font(box_width, box_height)
-
-        # 绘制白色居中序号标签
-        if font:
-            # 使用 anchor="mm" 居中绘制（如果支持）
-            try:
-                draw.text((cx, cy), label, fill="white", anchor="mm", font=font)
-            except TypeError:
-                # 旧版本 PIL 不支持 anchor，手动计算位置
-                bbox = draw.textbbox((0, 0), label, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height = bbox[3] - bbox[1]
-                text_x = cx - text_width // 2
-                text_y = cy - text_height // 2
-                draw.text((text_x, text_y), label, fill="white", font=font)
-        else:
-            # 无字体时使用默认
-            draw.text((cx, cy), label, fill="white")
-
-    samed_path = output_dir / "samed.png"
-    samed_image.save(str(samed_path))
+    samed_path, boxlib_path = figurebox.write_samed_and_boxlib(
+        output_dir, image, valid_boxes, prompt_list
+    )
     print(f"标记图片已保存: {samed_path}")
-
-    boxlib_data = {
-        "image_size": {"width": original_size[0], "height": original_size[1]},
-        "prompts_used": prompt_list,
-        "boxes": valid_boxes,
-        BOXLIB_NO_ICON_MODE_KEY: len(valid_boxes) == 0,
-    }
-
-    boxlib_path = output_dir / "boxlib.json"
-    with open(boxlib_path, 'w', encoding='utf-8') as f:
-        json.dump(boxlib_data, f, indent=2, ensure_ascii=False)
     print(f"Box 信息已保存: {boxlib_path}")
 
     return str(samed_path), str(boxlib_path), valid_boxes
@@ -3114,15 +3030,19 @@ def diagnose_icon_pair(crop_path: str | Path, nobg_path: str | Path) -> dict | N
     }
 
 
-def _white_key_alpha(rgb: "np.ndarray") -> "np.ndarray":
+def _white_key_alpha(rgb: "np.ndarray", ramp: float | None = None) -> "np.ndarray":
     """
     白底转透明：alpha 随"离纯白的距离"线性上升。
 
     学术插图的面板背景按构造就是白纸，不需要语义分割。相比 RMBG 的显著性判断，
     这个操作对细边框、浅色描边、实心色块都是无损的。
+
+    ramp 越大，越多"接近白"的像素被保留（阈值更宽松）；None 时用全局默认，
+    审图台的滑杆可对单个图标传入自定义值。
     """
+    effective_ramp = WHITE_KEY_RAMP_DISTANCE if ramp is None else max(1.0, float(ramp))
     distance = np.linalg.norm(rgb - 255.0, axis=2)
-    return np.clip(distance / WHITE_KEY_RAMP_DISTANCE, 0.0, 1.0).astype(np.float32)
+    return np.clip(distance / effective_ramp, 0.0, 1.0).astype(np.float32)
 
 
 def _border_ring_mask(height: int, width: int) -> "np.ndarray":
@@ -3259,6 +3179,8 @@ def build_icon_review_payload(
                 "border_present": info.get("border_present"),
                 "border_kept": info.get("border_kept"),
                 "status": status,
+                # 用户用白键滑杆调过的阈值，切换 choice 时沿用
+                "white_key_ramp": info.get("white_key_ramp"),
                 # 抠图当场触发保护时 nobg 已是原裁切，choice 与文件一致；
                 # 老任务事后体检只能给建议（见 server._load_icon_review_for_job）。
                 "recommended_choice": info.get("recommended_choice"),
@@ -3303,6 +3225,8 @@ def _apply_icon_choice_files(
     icons_dir: Path,
     label_clean: str,
     choice: str,
+    *,
+    white_key_ramp: float | None = None,
 ) -> dict:
     """
     Materialize the user's choice onto icon_{label}_nobg.png.
@@ -3314,6 +3238,8 @@ def _apply_icon_choice_files(
     三个方向都必须可逆，否则用户切一次就回不去了。white_key 与 original 都能由
     crop 现场重算，matted 依赖 `_matte.png` 侧存；旧任务可能没有该副本（后加的），
     此时若 nobg 已被覆盖就无法凭本地文件恢复，只能要求重抠——明确报错，不假装成功。
+
+    white_key_ramp 仅作用于 white_key 分支：审图台滑杆的人工阈值。
     """
     label_clean = _normalize_label_clean(label_clean)
     crop_path = icons_dir / f"icon_{label_clean}.png"
@@ -3338,7 +3264,7 @@ def _apply_icon_choice_files(
         with Image.open(crop_path) as crop_img:
             rgb_img = crop_img.convert("RGB")
             rgb = np.asarray(rgb_img, dtype=np.float32)
-            alpha = _white_key_alpha(rgb)
+            alpha = _white_key_alpha(rgb, ramp=white_key_ramp)
             out = rgb_img.convert("RGBA")
             out.putalpha(Image.fromarray((alpha * 255).astype(np.uint8), mode="L"))
             out.save(nobg_path)
@@ -3420,7 +3346,12 @@ def apply_icon_choices(
             raise ValueError(
                 f"无效 choice={raw_choice!r}（仅支持 {' / '.join(ICON_CHOICES)}）"
             )
-        result = _apply_icon_choice_files(icons_dir, label_clean, choice)
+        result = _apply_icon_choice_files(
+            icons_dir,
+            label_clean,
+            choice,
+            white_key_ramp=by_label.get(label_clean, {}).get("white_key_ramp"),
+        )
         item = by_label.get(label_clean) or {
             "label": f"<AF>{label_clean[2:]}" if label_clean.startswith("AF") else label_clean,
             "label_clean": label_clean,
@@ -3439,6 +3370,9 @@ def apply_icon_choices(
         )
         if choice == "original":
             item["fill_guard_triggered"] = bool(item.get("fill_guard_triggered"))
+        # white_key_ramp 已在结果里沿用；这里补写回，保证 payload 字段完整
+        if choice == "white_key" and item.get("white_key_ramp") is not None:
+            item["white_key_ramp"] = float(item["white_key_ramp"])
         by_label[label_clean] = item
         updated.append(label_clean)
 
@@ -3455,6 +3389,7 @@ def rematte_icons(
     disable_fill_guard: bool = False,
     prefer_original: bool = False,
     prefer_white_key: bool = False,
+    white_key_ramp: float | None = None,
 ) -> dict:
     """
     Re-run RMBG for selected icons (or all) using existing crops / boxlib.
@@ -3462,6 +3397,8 @@ def rematte_icons(
     prefer_original=True: skip model and force nobg = opaque crop.
     prefer_white_key=True: skip model and recompute white-background-to-alpha.
     两种 prefer_* 都不加载模型，因此在审图台上点选是即时的。
+    white_key_ramp 仅在 prefer_white_key=True 时生效：审图台滑杆的人工阈值，
+    会写入 icon_review.json，之后切换 choice 也沿用该值。
     """
     output_dir = Path(output_dir)
     figure_path = output_dir / "figure.png"
@@ -3557,7 +3494,12 @@ def rematte_icons(
                 # 复用 _apply_icon_choice_files：它已处理 matte 侧存保护与
                 # 白键重算，避免两处各写一遍导致行为漂移。
                 forced = "original" if prefer_original else "white_key"
-                res = _apply_icon_choice_files(icons_dir, label_clean, forced)
+                res = _apply_icon_choice_files(
+                    icons_dir,
+                    label_clean,
+                    forced,
+                    white_key_ramp=white_key_ramp if forced == "white_key" else None,
+                )
                 item.update(
                     {
                         "choice": forced,
@@ -3567,7 +3509,10 @@ def rematte_icons(
                         "diagnosis": (
                             "用户强制使用原裁切"
                             if prefer_original
-                            else "用户改用白底抠图（细边框无损）"
+                            else (
+                                "用户改用白底抠图（细边框无损）"
+                                + (f"，阈值 {float(white_key_ramp):g}" if white_key_ramp is not None else "")
+                            )
                         ),
                         "alpha_coverage": res.get("alpha_coverage"),
                         "removed_ratio": (
@@ -3578,6 +3523,8 @@ def rematte_icons(
                         "status": forced,
                     }
                 )
+                if forced == "white_key" and white_key_ramp is not None:
+                    item["white_key_ramp"] = max(1.0, float(white_key_ramp))
                 print(f"  {label}: 已改为 {forced}")
             else:
                 assert remover is not None
@@ -4846,9 +4793,9 @@ def method_to_svg(
             - "label": 灰色填充+黑色边框+序号标签（推荐）
         optimize_iterations: 步骤 4.6 优化迭代次数（0 表示跳过优化）
         merge_threshold: Box合并阈值，IoU/包含比例超过此值则合并
-            （0表示不合并，默认 0.85）
+            （0表示不合并，默认 0.01）
         max_detection_area_ratio: 单框面积占整图上限，超过则丢弃
-            （0表示不过滤，默认 0.25）
+            （0表示不过滤，默认 0）
         enable_upscale: 是否在步骤一后自动等比例放大到 4K 长边
         multimodal_image_scale: 发给多模态模型的预览图比例（不改磁盘原图/最终 SVG 画布）
         resume: 从 output_dir 已有产物断点续跑，跳过已完成步骤
@@ -4983,7 +4930,11 @@ def method_to_svg(
     print(f"占位符模式: {placeholder_mode}")
     print(f"优化迭代次数: {optimize_iterations}")
     print(f"Box合并阈值: {merge_threshold}")
-    print(f"单框面积上限: {max_detection_area_ratio:.0%} (超过则丢弃)")
+    print(
+        f"单框面积上限: {max_detection_area_ratio:.0%} (超过则丢弃)"
+        if max_detection_area_ratio > 0
+        else "单框面积上限: 关闭"
+    )
     print(f"4K等比例放大: {'开启' if enable_upscale else '关闭'}")
     print(f"多模态预览缩放: {multimodal_image_scale:g}")
     if resume:
